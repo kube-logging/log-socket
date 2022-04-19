@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/banzaicloud/log-socket/log"
+	"github.com/banzaicloud/log-socket/pkg/concurrent"
 )
 
 func main() {
@@ -26,10 +27,7 @@ func main() {
 	}
 	recordCh := make(chan record)
 
-	type listener struct {
-		Conn *websocket.Conn
-	}
-	var listeners concurrentSlice[listener]
+	var listeners concurrent.Slice[listener]
 
 	var wg sync.WaitGroup
 	wg.Add(3)
@@ -68,15 +66,14 @@ func main() {
 				return
 			}
 
-			concurrentSliceAppend(&listeners, listener{
+			l := listener{
 				Conn: wsConn,
 				// TODO: add auth info
-			})
+			}
+			listeners.Append(l)
 			wsConn.SetCloseHandler(func(code int, text string) error {
 				log.Event(logger, "websocket connection closing", log.Fields{"code": code, "text": text})
-				concurrentSliceRemove(&listeners, func(l listener) bool {
-					return l.Conn == wsConn
-				})
+				concurrent.RemoveItemsFromSlice(&listeners, l)
 				return nil
 			})
 		}))
@@ -87,12 +84,12 @@ func main() {
 		for r := range recordCh {
 			log.Event(logger, "forwarding record", log.V(1), log.Fields{"record": r})
 
-			if len(listeners.items) == 0 {
+			if listeners.Len() == 0 {
 				log.Event(logger, "no listeners, discarding record", log.V(1), log.Fields{"record": r})
 				continue
 			}
 			var listenersToRemove []listener
-			concurrentSliceForEach(&listeners, func(l listener) {
+			listeners.ForEachWithIndex(func(i int, l listener) {
 				logger := log.WithFields(logger, log.Fields{"listener": l})
 
 				// TODO: check auth
@@ -114,56 +111,17 @@ func main() {
 					return
 				}
 			})
-			if len(listenersToRemove) > 0 {
-				concurrentSliceRemove(&listeners, func(l listener) bool {
-					for _, lr := range listenersToRemove {
-						if lr.Conn == l.Conn {
-							return true
-						}
-					}
-					return false
-				})
-			}
+			concurrent.RemoveItemsFromSlice(&listeners, listenersToRemove...)
 		}
 	}()
 
 	wg.Wait()
 }
 
-type concurrentSlice[T any] struct {
-	items []T
-	mutex sync.RWMutex
+type listener struct {
+	Conn *websocket.Conn
 }
 
-func concurrentSliceAppend[T any](s *concurrentSlice[T], i T) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	s.items = append(s.items, i)
-}
-
-func concurrentSliceForEach[T any](s *concurrentSlice[T], fn func(T)) {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-	for _, item := range s.items {
-		fn(item)
-	}
-}
-
-func concurrentSliceRemove[T any](s *concurrentSlice[T], pred func(T) bool) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	for i := len(s.items) - 1; i >= 0; i-- {
-		if pred(s.items[i]) {
-			s.items = append(s.items[:i], s.items[i+1:]...)
-		}
-	}
-}
-
-func closed[T any](ch <-chan T) bool {
-	select {
-	case _, open := <-ch:
-		return !open
-	default:
-		return false
-	}
+func (l listener) Equals(o listener) bool {
+	return l.Conn == o.Conn
 }

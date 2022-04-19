@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"strings"
 
+	"github.com/banzaicloud/log-socket/log"
 	"github.com/gorilla/websocket"
 	"github.com/spf13/pflag"
 )
@@ -16,28 +16,30 @@ func main() {
 	pflag.StringVar(&listenAddr, "listen-addr", ":10001", "address where the service accepts WebSocket listeners")
 	pflag.Parse()
 
+	var logger log.Target = log.NewWriterTarget(os.Stdout)
+
 	if !strings.Contains(listenAddr, "://") {
 		listenAddr = "ws://" + listenAddr
 	}
 	wsConn, _, err := websocket.DefaultDialer.DialContext(context.Background(), listenAddr, nil)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to open websocket connection: %v\n", err)
+		log.Event(logger, "failed to open websocket connection", log.Error(err))
 		return
 	}
 	for {
 		msgTyp, reader, err := wsConn.NextReader()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to get next reader for websocket connection: %v\n", err)
+			log.Event(logger, "failed to get next reader for websocket connection", log.Error(err))
 			continue
 		}
 		switch msgTyp {
 		case websocket.BinaryMessage:
 			data, err := io.ReadAll(reader)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to read record data: %v\n", err)
+				log.Event(logger, "failed to read record data", log.Error(err))
 				continue
 			}
-			fmt.Fprintf(os.Stdout, "new record: %s\n", data)
+			log.Event(logger, "new record", log.Fields{"data": data})
 		}
 	}
 }
