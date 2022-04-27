@@ -1,16 +1,18 @@
 package main
 
 import (
-	"io"
-	"net/http"
+	"crypto/tls"
+	"math/big"
+	"net"
 	"os"
 	"sync"
 
-	"github.com/gorilla/websocket"
 	"github.com/spf13/pflag"
 
+	"github.com/banzaicloud/log-socket/internal"
 	"github.com/banzaicloud/log-socket/log"
-	"github.com/banzaicloud/log-socket/pkg/concurrent"
+	"github.com/banzaicloud/log-socket/pkg/slice"
+	"github.com/banzaicloud/log-socket/pkg/tlstools"
 )
 
 func main() {
@@ -20,108 +22,107 @@ func main() {
 	pflag.StringVar(&listenAddr, "listen-addr", ":10001", "address where the service accepts WebSocket listeners")
 	pflag.Parse()
 
-	var logger log.Target = log.NewWriterTarget(os.Stdout)
+	var logs log.Sink = log.NewWriterSink(os.Stdout)
 
-	type record struct {
-		Data []byte
+	records := make(internal.RecordsChannel)
+	listenerReg := make(internal.ListenerEventChannel)
+
+	caCert, caKey, err := tlstools.GenerateSelfSignedCA()
+	if err != nil {
+		log.Event(logs, "failed to generate self-signed CA", log.Error(err))
+		return
 	}
-	recordCh := make(chan record)
 
-	var listeners concurrent.Slice[listener]
+	tlsCert, err := tlstools.GenerateTLSCert(caCert, caKey, big.NewInt(1), []string{"localhost"}, []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::")})
+	if err != nil {
+		log.Event(logs, "failed to generate TLS certificate with self-signed CA", log.Error(err))
+		return
+	}
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{
+			tlsCert,
+		},
+	}
+
+	stopLatch := internal.NewWaitableLatch()
+	stopSignal := internal.NewHandleableLatch(stopLatch.Chan())
 
 	var wg sync.WaitGroup
-	wg.Add(3)
-
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer close(recordCh)
+		defer stopLatch.Close()
 
-		http.ListenAndServe(ingestAddr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			data, err := io.ReadAll(r.Body)
-			if err != nil {
-				http.Error(w, "failed to read request body", http.StatusInternalServerError)
-				return
-			}
-			if err := r.Body.Close(); err != nil {
-				log.Event(logger, "failed to close request body")
-			}
-			rec := record{
-				// TODO: extract auth data from request
-				Data: data,
-			}
-			log.Event(logger, "got log record via HTTP", log.V(1), log.Fields{"record": rec})
-			recordCh <- rec
-			w.WriteHeader(http.StatusOK)
-		}))
+		internal.Ingest(ingestAddr, records, logs, stopSignal, nil)
 	}()
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer stopLatch.Close()
 
-		upgrader := websocket.Upgrader{}
-
-		http.ListenAndServe(listenAddr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			wsConn, err := upgrader.Upgrade(w, r, nil)
-			if err != nil {
-				log.Event(logger, "failed to upgrade connection", log.Error(err))
-				return
-			}
-
-			l := listener{
-				Conn: wsConn,
-				// TODO: add auth info
-			}
-			listeners.Append(l)
-			wsConn.SetCloseHandler(func(code int, text string) error {
-				log.Event(logger, "websocket connection closing", log.Fields{"code": code, "text": text})
-				concurrent.RemoveItemsFromSlice(&listeners, l)
-				return nil
-			})
-		}))
+		internal.Listen(listenAddr, tlsConfig, listenerReg, logs, stopSignal, nil)
 	}()
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer stopLatch.Close()
 
-		for r := range recordCh {
-			log.Event(logger, "forwarding record", log.V(1), log.Fields{"record": r})
+		var listeners []internal.Listener
 
-			if listeners.Len() == 0 {
-				log.Event(logger, "no listeners, discarding record", log.V(1), log.Fields{"record": r})
-				continue
+	loop:
+		for {
+			select {
+			case <-stopLatch.Chan():
+				break loop
+			case ev := <-listenerReg:
+				listenersToAdd, listenersToRemove := gatherListenerEvents(ev, listenerReg)
+				if len(listenersToRemove) > 0 {
+					slice.RemoveFunc(&listeners, func(item internal.Listener) bool {
+						for _, l := range listenersToRemove {
+							if l == item {
+								return true
+							}
+						}
+						return false
+					})
+				}
+				listeners = append(listeners, listenersToAdd...)
+			case r, ok := <-records:
+				if !ok {
+					log.Event(logs, "records channel closed", log.V(1))
+					break loop
+				}
+
+				log.Event(logs, "forwarding record", log.V(1), log.Fields{"record": r})
+
+				if len(listeners) == 0 {
+					log.Event(logs, "no listeners, discarding record", log.V(1), log.Fields{"record": r})
+					continue loop
+				}
+
+				for _, l := range listeners {
+					l.Send(r)
+				}
 			}
-			var listenersToRemove []listener
-			listeners.ForEachWithIndex(func(i int, l listener) {
-				logger := log.WithFields(logger, log.Fields{"listener": l})
-
-				// TODO: check auth
-
-				wc, err := l.Conn.NextWriter(websocket.BinaryMessage)
-				if err != nil {
-					log.Event(logger, "failed to get next writer for websocket connection", log.Error(err))
-					listenersToRemove = append(listenersToRemove, l)
-					return
-				}
-				if _, err := wc.Write(r.Data); err != nil {
-					log.Event(logger, "failed to write record data to websocket connection", log.Error(err))
-					listenersToRemove = append(listenersToRemove, l)
-					return
-				}
-				if err := wc.Close(); err != nil {
-					log.Event(logger, "failed to flush data to websocket connection", log.Error(err))
-					listenersToRemove = append(listenersToRemove, l)
-					return
-				}
-			})
-			concurrent.RemoveItemsFromSlice(&listeners, listenersToRemove...)
 		}
 	}()
 
 	wg.Wait()
 }
 
-type listener struct {
-	Conn *websocket.Conn
-}
-
-func (l listener) Equals(o listener) bool {
-	return l.Conn == o.Conn
+func gatherListenerEvents(ev internal.ListenerEvent, ch <-chan internal.ListenerEvent) (listenersToAdd []internal.Listener, listenersToRemove []internal.Listener) {
+start:
+	switch ev.EventType {
+	case internal.RegisterListener:
+		listenersToAdd = append(listenersToAdd, ev.Listener)
+	case internal.UnregisterListener:
+		listenersToRemove = append(listenersToRemove, ev.Listener)
+	}
+	select {
+	case ev = <-ch:
+		goto start
+	default:
+		return
+	}
 }

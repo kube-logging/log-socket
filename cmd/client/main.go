@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"os"
 	"strings"
@@ -16,30 +17,35 @@ func main() {
 	pflag.StringVar(&listenAddr, "listen-addr", ":10001", "address where the service accepts WebSocket listeners")
 	pflag.Parse()
 
-	var logger log.Target = log.NewWriterTarget(os.Stdout)
+	var logs log.Sink = log.NewWriterSink(os.Stdout)
 
 	if !strings.Contains(listenAddr, "://") {
-		listenAddr = "ws://" + listenAddr
+		listenAddr = "wss://" + listenAddr
 	}
-	wsConn, _, err := websocket.DefaultDialer.DialContext(context.Background(), listenAddr, nil)
+
+	dialer := *websocket.DefaultDialer
+	dialer.TLSClientConfig = &tls.Config{
+		InsecureSkipVerify: true,
+	}
+	wsConn, _, err := dialer.DialContext(context.Background(), listenAddr, nil)
 	if err != nil {
-		log.Event(logger, "failed to open websocket connection", log.Error(err))
+		log.Event(logs, "failed to open websocket connection", log.Error(err))
 		return
 	}
 	for {
 		msgTyp, reader, err := wsConn.NextReader()
 		if err != nil {
-			log.Event(logger, "failed to get next reader for websocket connection", log.Error(err))
+			log.Event(logs, "failed to get next reader for websocket connection", log.Error(err))
 			continue
 		}
 		switch msgTyp {
 		case websocket.BinaryMessage:
 			data, err := io.ReadAll(reader)
 			if err != nil {
-				log.Event(logger, "failed to read record data", log.Error(err))
+				log.Event(logs, "failed to read record data", log.Error(err))
 				continue
 			}
-			log.Event(logger, "new record", log.Fields{"data": data})
+			log.Event(logs, "new record", log.Fields{"data": data})
 		}
 	}
 }

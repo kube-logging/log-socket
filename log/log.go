@@ -13,7 +13,7 @@ import (
 var Event = log.Event
 
 type Fields = log.FieldMap
-type Target = log.Target
+type Sink = log.Target
 
 func Error(err error) log.FieldSet {
 	return Fields{
@@ -27,34 +27,34 @@ func V(verbosity int) log.FieldSet {
 	}
 }
 
-func WithFields(target Target, fields log.FieldSet) Target {
-	return TargetWithFields{
-		Target: target,
+func WithFields(logs Sink, fields log.FieldSet) Sink {
+	return SinkWithFields{
+		Sink:   logs,
 		Fields: fields,
 	}
 }
 
-type TargetWithFields struct {
-	Target
+type SinkWithFields struct {
+	Sink
 	Fields log.FieldSet
 }
 
-func (t TargetWithFields) Record(message string, fields log.FieldSet) {
-	t.Target.Record(message, log.CollapseFieldSets(t.Fields, fields))
+func (t SinkWithFields) Record(message string, fields log.FieldSet) {
+	t.Sink.Record(message, log.CollapseFieldSets(t.Fields, fields))
 }
 
-func NewWriterTarget(w io.Writer) *WriterTarget {
-	return &WriterTarget{
+func NewWriterSink(w io.Writer) *WriterSink {
+	return &WriterSink{
 		writer: w,
 	}
 }
 
-type WriterTarget struct {
+type WriterSink struct {
 	writer io.Writer
 	mutex  sync.Mutex
 }
 
-func (t *WriterTarget) Record(message string, fields log.FieldSet) {
+func (t *WriterSink) Record(message string, fields log.FieldSet) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 
