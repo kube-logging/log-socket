@@ -2,6 +2,13 @@ package internal
 
 import (
 	"sync"
+
+	"k8s.io/apimachinery/pkg/types"
+)
+
+var (
+	DefLabel          = map[string]string{"app.kubernetes.io/created-by": "log-socket"}
+	FlowNameHeaderKey = "flowName"
 )
 
 type Record struct {
@@ -81,6 +88,12 @@ func (l *HandleableLatch) watch() {
 	for _, handler := range l.handlers {
 		handler()
 	}
+}
+
+type ReconcileEventChannel chan ReconcileEvent
+
+type ReconcileEvent struct {
+	Requests []types.NamespacedName
 }
 
 type ListenerEventChannel chan ListenerEvent

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"math/big"
 	"net"
@@ -8,12 +9,23 @@ import (
 	"sync"
 
 	"github.com/spf13/pflag"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	// "k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/banzaicloud/log-socket/internal"
+	"github.com/banzaicloud/log-socket/internal/reconciler"
 	"github.com/banzaicloud/log-socket/log"
 	"github.com/banzaicloud/log-socket/pkg/slice"
 	"github.com/banzaicloud/log-socket/pkg/tlstools"
+	loggingv1beta1 "github.com/banzaicloud/logging-operator/pkg/sdk/logging/api/v1beta1"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+// var (
+// 	scheme = runtime.NewScheme()
+// )
 
 func main() {
 	var ingestAddr string
@@ -24,8 +36,24 @@ func main() {
 
 	var logs log.Sink = log.NewWriterSink(os.Stdout)
 
+	// mgrOptions := ctrl.Options{
+	// 	Scheme: scheme,
+	// 	// MetricsBindAddress: metricsAddr,
+	// 	// LeaderElection:     enableLeaderElection,
+	// 	// LeaderElectionID:   "logging-operator." + loggingv1beta1.GroupVersion.Group,
+	// 	// MapperProvider:     k8sutil.NewCached,
+	// 	Port: 9443,
+	// }
+
+	// mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOptions)
+	// if err != nil {
+	// 	log.Error(err, "unable to start manager")
+	// 	os.Exit(1)
+	// }
+
 	records := make(internal.RecordsChannel)
 	listenerReg := make(internal.ListenerEventChannel)
+	reconcileEventChannel := make(internal.ReconcileEventChannel)
 
 	caCert, caKey, err := tlstools.GenerateSelfSignedCA()
 	if err != nil {
@@ -47,6 +75,29 @@ func main() {
 
 	stopLatch := internal.NewWaitableLatch()
 	stopSignal := internal.NewHandleableLatch(stopLatch.Chan())
+
+	s := runtime.NewScheme()
+	if err := loggingv1beta1.AddToScheme(s); err != nil {
+		panic(err)
+	}
+	c, err := client.New(ctrl.GetConfigOrDie(), client.Options{Scheme: s})
+	if err != nil {
+		panic(err)
+	}
+	rec := reconciler.New(ingestAddr, c)
+
+	go func() {
+		for {
+			select {
+			case <-stopLatch.Chan():
+				goto foo
+			case evt := <-reconcileEventChannel:
+				res, err := rec.Reconcile(context.Background(), evt)
+				log.Event(logs, "reconcile", log.Fields{"res": res, "err": err})
+			}
+		}
+	foo:
+	}()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -88,6 +139,10 @@ func main() {
 					})
 				}
 				listeners = append(listeners, listenersToAdd...)
+				if len(listenersToAdd) > 0 || len(listenersToRemove) > 0 {
+					reconcileEventChannel <- generateReconcileEvent(listeners)
+
+				}
 			case r, ok := <-records:
 				if !ok {
 					log.Event(logs, "records channel closed", log.V(1))
@@ -125,4 +180,8 @@ start:
 	default:
 		return
 	}
+}
+
+func generateReconcileEvent(listeners []internal.Listener) internal.ReconcileEvent {
+	return internal.ReconcileEvent{}
 }

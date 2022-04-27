@@ -2,9 +2,12 @@ package internal
 
 import (
 	"crypto/tls"
+	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/websocket"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/banzaicloud/log-socket/log"
 )
@@ -32,10 +35,17 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 
 			// TODO: create (cluster)output (if not exists) and add it to (cluster)flow
 
+			nn, err := ExtractFlow(r)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+
 			l := listener{
 				Conn: wsConn,
 				reg:  reg,
 				logs: logs,
+				flow: nn,
 				// TODO: add auth info
 			}
 			reg.Register(l)
@@ -66,6 +76,7 @@ type listener struct {
 	Conn *websocket.Conn
 	reg  ListenerRegistry
 	logs log.Sink
+	flow types.NamespacedName
 }
 
 func (l listener) Equals(o listener) bool {
@@ -93,4 +104,24 @@ func (l listener) Send(r Record) {
 
 unregister:
 	go l.reg.Unregister(l)
+}
+
+func ExtractFlow(req *http.Request) (res types.NamespacedName, err error) {
+	elts := strings.Split(strings.TrimLeft(req.URL.Path, "/"), "/")
+	if len(elts) < 2 {
+		return res, errors.New("error parsing listener reg URL")
+	}
+
+	switch elts[0] {
+	case "flow":
+		if len(elts) != 3 {
+			return res, errors.New("error parsing listener reg URL")
+		}
+		res = types.NamespacedName{Namespace: elts[1], Name: elts[2]}
+	case "clusterflow":
+		res = types.NamespacedName{Name: elts[1]}
+	default:
+		return res, errors.New("unknown flow type in listener reg URL")
+	}
+	return
 }
