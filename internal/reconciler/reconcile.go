@@ -3,6 +3,8 @@ package reconciler
 import (
 	"context"
 	"errors"
+	"path"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -107,7 +109,7 @@ func (r *Reconciler) EnsureOutput(ctx context.Context, flowRef internal.FlowRefe
 	var obj client.Object
 	meta := r.OutputObjectMeta(types.NamespacedName{Namespace: flowRef.Namespace, Name: generateOutputName(flowRef.Name)}, flowRef.Name)
 	spec := loggingv1beta1.OutputSpec{
-		HTTPOutput: r.HTTPOuput(map[string]string{internal.FlowNameHeaderKey: flowRef.Name}),
+		HTTPOutput: r.HTTPOuput(flowRef),
 	}
 	switch flowRef.Kind {
 	case internal.FKClusterFlow:
@@ -143,10 +145,10 @@ func (r *Reconciler) OutputObjectMeta(key types.NamespacedName, flowName string)
 	}
 }
 
-func (r *Reconciler) HTTPOuput(headers map[string]string) *output.HTTPOutputConfig {
+func (r *Reconciler) HTTPOuput(flowRef internal.FlowReference) *output.HTTPOutputConfig {
+	path.Join()
 	return &output.HTTPOutputConfig{
-		Headers:  headers,
-		Endpoint: r.IngestAddr,
+		Endpoint: strings.TrimRight(r.IngestAddr, "/") + "/" + flowRef.URL(),
 		Format: &output.Format{
 			Type: "json",
 		},

@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"path"
 	"sync"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -8,7 +9,6 @@ import (
 
 var (
 	DefLabel          = map[string]string{"app.kubernetes.io/created-by": "log-socket"}
-	FlowNameHeaderKey = "flowName"
 	FlowAnnotationKey = "flowRef"
 )
 
@@ -104,6 +104,10 @@ const (
 type FlowReference struct {
 	types.NamespacedName
 	Kind FlowKind
+}
+
+func (f FlowReference) URL() string {
+	return path.Join(string(f.Kind), f.Namespace, f.Name)
 }
 
 type ReconcileEvent struct {
