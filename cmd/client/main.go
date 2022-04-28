@@ -20,7 +20,7 @@ func main() {
 	var logs log.Sink = log.NewWriterSink(os.Stdout)
 
 	if !strings.Contains(listenAddr, "://") {
-		listenAddr = "wss://" + listenAddr
+		listenAddr = "wss://" + listenAddr + "/clusterflow/default/loki"
 	}
 
 	dialer := *websocket.DefaultDialer

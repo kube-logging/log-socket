@@ -10,7 +10,6 @@ import (
 
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	// "k8s.io/apimachinery/pkg/runtime"
@@ -145,6 +144,8 @@ func main() {
 		}
 	}()
 
+	reconcileEventChannel <- internal.ReconcileEvent{}
+
 	wg.Wait()
 }
 
@@ -165,9 +166,16 @@ start:
 }
 
 func generateReconcileEvent(listeners []internal.Listener) internal.ReconcileEvent {
-	requests := []types.NamespacedName{}
+	requestMap := map[internal.FlowReference]bool{}
 	for _, l := range listeners {
-		requests = append(requests, l.Flow())
+		requestMap[l.Flow()] = true
 	}
+
+	requests := []internal.FlowReference{}
+
+	for k := range requestMap {
+		requests = append(requests, k)
+	}
+
 	return internal.ReconcileEvent{Requests: requests}
 }

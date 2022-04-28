@@ -9,6 +9,7 @@ import (
 var (
 	DefLabel          = map[string]string{"app.kubernetes.io/created-by": "log-socket"}
 	FlowNameHeaderKey = "flowName"
+	FlowAnnotationKey = "flowRef"
 )
 
 type Record struct {
@@ -92,8 +93,20 @@ func (l *HandleableLatch) watch() {
 
 type ReconcileEventChannel chan ReconcileEvent
 
+type FlowKind string
+
+const (
+	FKClusterFlow FlowKind = "clusterflow"
+	FKFlow        FlowKind = "flow"
+)
+
+type FlowReference struct {
+	types.NamespacedName
+	Kind FlowKind
+}
+
 type ReconcileEvent struct {
-	Requests []types.NamespacedName
+	Requests []FlowReference
 }
 
 type ListenerEventChannel chan ListenerEvent

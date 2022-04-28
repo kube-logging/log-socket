@@ -13,6 +13,7 @@ import (
 	loggingv1beta1 "github.com/banzaicloud/logging-operator/pkg/sdk/logging/api/v1beta1"
 	"github.com/banzaicloud/logging-operator/pkg/sdk/logging/model/output"
 	"github.com/banzaicloud/operator-tools/pkg/reconciler"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 func New(ingestAddr string, client client.Client) *Reconciler {
@@ -22,6 +23,28 @@ func New(ingestAddr string, client client.Client) *Reconciler {
 type Reconciler struct {
 	Client     client.Client
 	IngestAddr string
+}
+
+type UpdateReference func(refs []string) []string
+
+type OutputReference string
+
+func (o OutputReference) Add(refs []string) []string {
+	for _, v := range refs {
+		if v == string(o) {
+			return refs
+		}
+	}
+	return append(refs, string(o))
+}
+
+func (o OutputReference) Remove(refs []string) []string {
+	for i := range refs {
+		if refs[i] == string(o) {
+			return append(refs[:i], refs[i+1:]...)
+		}
+	}
+	return refs
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, event internal.ReconcileEvent) (res ctrl.Result, err error) {
@@ -36,7 +59,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, event internal.ReconcileEven
 		return res, err
 	}
 
-	outputMap := map[types.NamespacedName]interface{}{}
+	outputMap := map[types.NamespacedName]client.Object{}
 	for _, output := range OutputList.Items {
 		outputMap[client.ObjectKeyFromObject(&output)] = &output
 	}
@@ -48,71 +71,75 @@ func (r *Reconciler) Reconcile(ctx context.Context, event internal.ReconcileEven
 	for _, req := range event.Requests {
 		outputName := types.NamespacedName{Namespace: req.Namespace, Name: generateOutputName(req.Name)}
 		if _, ok := outputMap[outputName]; !ok {
-			// creating new outputs
-			res, err := r.ReconcileOutput(ctx, outputName, reconciler.StatePresent, req.String())
+			res, err := r.EnsureOutput(ctx, req)
 			result.Combine(&res, err)
-
-			// updating flows
-			{
-				res, err := r.ReconcileFlow(ctx, req, false)
-				result.Combine(&res, err)
-			}
 		}
-		delete(outputMap, req)
+		delete(outputMap, outputName)
 	}
 
 	// handle removed outputs
-	for key := range outputMap {
-		// updating flow first
-		res, err := r.ReconcileFlow(ctx, key, true)
-		result.Combine(&res, err)
-
-		// removing unused outputs
-		{
-			res, err := r.ReconcileOutput(ctx, key, reconciler.StateAbsent, "")
-			result.Combine(&res, err)
-		}
+	for _, v := range outputMap {
+		r.RemoveOutput(ctx, v)
 	}
 
 	return result.Result, result.Err
 }
 
-func (r *Reconciler) ReconcileOutput(ctx context.Context, key client.ObjectKey, state reconciler.DesiredState, flowName string) (res ctrl.Result, err error) {
+func (r *Reconciler) RemoveOutput(ctx context.Context, obj client.Object) (res ctrl.Result, err error) {
+	flowName := obj.GetAnnotations()[internal.FlowAnnotationKey]
+	res, err = r.ReconcileFlow(ctx, internal.FlowReference{
+		NamespacedName: types.NamespacedName{
+			Namespace: obj.GetNamespace(),
+			Name:      flowName},
+		Kind: getFlowKind(obj)},
+		OutputReference(obj.GetName()).Remove)
 
-	var outputBase client.Object
+	if client.IgnoreNotFound(err) != nil {
+		return
+	}
 
-	if key.Namespace == "" {
-		outputBase = &loggingv1beta1.ClusterOutput{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: key.Name,
-			},
+	err = r.Client.Delete(ctx, obj)
+
+	return
+}
+
+func (r *Reconciler) EnsureOutput(ctx context.Context, flowRef internal.FlowReference) (res ctrl.Result, err error) {
+	var obj client.Object
+	meta := r.OutputObjectMeta(types.NamespacedName{Namespace: flowRef.Namespace, Name: generateOutputName(flowRef.Name)}, flowRef.Name)
+	spec := loggingv1beta1.OutputSpec{
+		HTTPOutput: r.HTTPOuput(map[string]string{internal.FlowNameHeaderKey: flowRef.Name}),
+	}
+	switch flowRef.Kind {
+	case internal.FKClusterFlow:
+		obj = &loggingv1beta1.ClusterOutput{
+			ObjectMeta: meta,
 			Spec: loggingv1beta1.ClusterOutputSpec{
-				OutputSpec: loggingv1beta1.OutputSpec{
-					HTTPOutput: r.HTTPOuput(map[string]string{internal.FlowNameHeaderKey: flowName}),
-				},
+				OutputSpec: spec,
 			},
 		}
-	} else {
-		outputBase = &loggingv1beta1.Output{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: key.Namespace,
-				Name:      key.Name,
-			},
-			Spec: loggingv1beta1.OutputSpec{
-				HTTPOutput: r.HTTPOuput(map[string]string{internal.FlowNameHeaderKey: flowName}),
-			},
+	default:
+		obj = &loggingv1beta1.Output{
+			ObjectMeta: meta,
+			Spec:       spec,
 		}
 	}
 
-	switch state {
-	case reconciler.StatePresent:
-		err = r.Client.Create(ctx, outputBase)
-		return res, err
-	case reconciler.StateAbsent:
-		err = r.Client.Delete(ctx, outputBase)
-		return res, err
-	default:
-		return res, errors.New("unknow state")
+	err = r.Client.Create(ctx, obj)
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		return
+	}
+
+	res, err = r.ReconcileFlow(ctx, flowRef, OutputReference(obj.GetName()).Add)
+
+	return
+}
+
+func (r *Reconciler) OutputObjectMeta(key types.NamespacedName, flowName string) metav1.ObjectMeta {
+	return metav1.ObjectMeta{
+		Namespace:   key.Namespace,
+		Name:        key.Name,
+		Labels:      internal.DefLabel,
+		Annotations: map[string]string{internal.FlowAnnotationKey: flowName},
 	}
 }
 
@@ -126,33 +153,27 @@ func (r *Reconciler) HTTPOuput(headers map[string]string) *output.HTTPOutputConf
 	}
 }
 
-func (r *Reconciler) ReconcileFlow(ctx context.Context, key client.ObjectKey, removeFlow bool) (res ctrl.Result, err error) {
-	outputName := generateOutputName(key.Name)
-	switch key.Namespace {
-	case "":
+func (r *Reconciler) ReconcileFlow(ctx context.Context, ref internal.FlowReference, updater UpdateReference) (res ctrl.Result, err error) {
+	if updater == nil {
+		return res, errors.New("no update function added")
+	}
+	switch ref.Kind {
+	case internal.FKClusterFlow:
 		var clusterFlow loggingv1beta1.ClusterFlow
-		if err = r.Client.Get(ctx, key, &clusterFlow); err != nil {
+		if err = r.Client.Get(ctx, ref.NamespacedName, &clusterFlow); err != nil {
 			return
 		}
-		if removeFlow {
-			clusterFlow.Spec.GlobalOutputRefs = removeLine(clusterFlow.Spec.GlobalOutputRefs, outputName)
-		} else {
-			clusterFlow.Spec.GlobalOutputRefs = append(clusterFlow.Spec.GlobalOutputRefs, outputName)
-		}
+		clusterFlow.Spec.GlobalOutputRefs = updater(clusterFlow.Spec.GlobalOutputRefs)
 		if err = r.Client.Update(ctx, &clusterFlow); err != nil {
 			return
 		}
 		return
 	default:
 		var flow loggingv1beta1.Flow
-		if err = r.Client.Get(ctx, key, &flow); err != nil {
+		if err = r.Client.Get(ctx, ref.NamespacedName, &flow); err != nil {
 			return
 		}
-		if removeFlow {
-			flow.Spec.LocalOutputRefs = removeLine(flow.Spec.LocalOutputRefs, outputName)
-		} else {
-			flow.Spec.LocalOutputRefs = append(flow.Spec.LocalOutputRefs, outputName)
-		}
+		flow.Spec.GlobalOutputRefs = updater(flow.Spec.GlobalOutputRefs)
 		if err = r.Client.Update(ctx, &flow); err != nil {
 			return
 		}
@@ -160,15 +181,15 @@ func (r *Reconciler) ReconcileFlow(ctx context.Context, key client.ObjectKey, re
 	}
 }
 
-func removeLine(strs []string, str string) []string {
-	for i := range strs {
-		if strs[i] == str {
-			return append(strs[:i], strs[i+1:]...)
-		}
-	}
-	return strs
-}
-
 func generateOutputName(name string) string {
 	return name + "-tailer"
+}
+
+func getFlowKind(v client.Object) internal.FlowKind {
+	kind := internal.FKFlow
+	_, ok := v.(*loggingv1beta1.ClusterOutput)
+	if ok {
+		kind = internal.FKClusterFlow
+	}
+	return kind
 }
