@@ -66,6 +66,7 @@ func main() {
 		panic(err)
 	}
 	rec := reconciler.New(ingestAddr, c)
+	authenticator := internal.TokenReviewAuthenticator{Client: c}
 
 	go func() {
 		for {
@@ -93,7 +94,7 @@ func main() {
 		defer wg.Done()
 		defer stopLatch.Close()
 
-		internal.Listen(listenAddr, tlsConfig, listenerReg, logs, stopSignal, nil)
+		internal.Listen(listenAddr, tlsConfig, listenerReg, logs, stopSignal, nil, authenticator)
 	}()
 	wg.Add(1)
 	go func() {

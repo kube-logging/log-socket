@@ -7,29 +7,36 @@ import (
 	"strings"
 
 	"github.com/gorilla/websocket"
+	authv1 "k8s.io/api/authentication/v1"
 
 	"github.com/banzaicloud/log-socket/log"
 )
 
-func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.Sink, stopSignal Handleable, terminationSignal Handleable) {
+func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.Sink,
+	stopSignal Handleable, terminationSignal Handleable, authenticator Authenticator) {
 	upgrader := websocket.Upgrader{}
 	server := &http.Server{
 		Addr: addr,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			log.Event(logs, "new listener", log.V(1), log.Fields{"headers": r.Header})
 
-			// request:
-			// * token
-			// * (cluster)flow name (+ namespace)
+			authToken := r.Header.Get(AuthHeaderKey)
+			if authToken == "" {
+				http.Error(w, "missing authentication token", http.StatusForbidden)
+				return
+			}
 
-			// TODO: auth (token review)
+			usrInfo, err := authenticator.Authenticate(authToken)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 
-			// tr := authv1.TokenReview{}
-			// tr.Spec.Token = "TODO token here"
-
-			// //TODO create
-
-			// usr := tr.Status.User
+			nn, err := ExtractFlow(r)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
 
 			wsConn, err := upgrader.Upgrade(w, r, nil)
 			if err != nil {
@@ -39,20 +46,12 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 
 			log.Event(logs, "successful websocket upgrade", log.V(1), log.Fields{"req": r, "wsConn": wsConn})
 
-			// TODO: create (cluster)output (if not exists) and add it to (cluster)flow
-
-			nn, err := ExtractFlow(r)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusNotFound)
-				return
-			}
-
 			l := listener{
-				Conn: wsConn,
-				reg:  reg,
-				logs: logs,
-				flow: nn,
-				// TODO: add auth info
+				Conn:    wsConn,
+				reg:     reg,
+				logs:    logs,
+				flow:    nn,
+				usrInfo: usrInfo,
 			}
 			reg.Register(l)
 			go func() {
@@ -87,10 +86,11 @@ type Listener interface {
 }
 
 type listener struct {
-	Conn *websocket.Conn
-	reg  ListenerRegistry
-	logs log.Sink
-	flow FlowReference
+	Conn    *websocket.Conn
+	reg     ListenerRegistry
+	logs    log.Sink
+	flow    FlowReference
+	usrInfo authv1.UserInfo
 }
 
 func (l listener) Equals(o listener) bool {
@@ -98,14 +98,17 @@ func (l listener) Equals(o listener) bool {
 }
 
 func (l listener) Send(r Record) {
-	// TODO: check auth
+
+	// TODO: complete auth check here
+	x := GetIn(r.Data, "kubernetes", "labels", RBACAllowList)
+	_ = x
 
 	wc, err := l.Conn.NextWriter(websocket.BinaryMessage)
 	if err != nil {
 		log.Event(l.logs, "an error occurred while getting next writer for websocket connection", log.Error(err))
 		goto unregister
 	}
-	if _, err := wc.Write(r.Data); err != nil {
+	if _, err := wc.Write(r.RawData); err != nil {
 		log.Event(l.logs, "an error occurred while writing record data to websocket connection", log.Error(err))
 		goto unregister
 	}

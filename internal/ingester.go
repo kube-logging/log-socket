@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -52,10 +53,18 @@ func Ingest(addr string, records RecordSink, logs log.Sink, stopSignal Handleabl
 				http.Error(w, "failed to close request body", http.StatusInternalServerError)
 				return
 			}
+
 			rec := Record{
-				Data: data,
-				Flow: flow,
+				RawData: data,
+				Flow:    flow,
 			}
+
+			if err := json.Unmarshal(data, &rec.Data); err != nil {
+				log.Event(logs, "failed to parse log data", log.Error(err))
+				http.Error(w, "failed to parse log data", http.StatusBadRequest)
+				return
+			}
+
 			log.Event(logs, "got log record via HTTP", log.V(1), log.Fields{"record": rec})
 			records.Push(rec)
 			w.WriteHeader(http.StatusOK)

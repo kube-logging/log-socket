@@ -4,6 +4,7 @@ import (
 	"path"
 	"sync"
 
+	authv1 "k8s.io/api/authentication/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -12,9 +13,35 @@ var (
 	FlowAnnotationKey = "flowRef"
 )
 
+type Strimap = map[string]interface{}
+
+func GetIn(m interface{}, args ...interface{}) interface{} {
+	var subSet = m
+	for _, arg := range args {
+		switch t := subSet.(type) {
+		case []interface{}:
+			elt, ok := arg.(int)
+			if !ok {
+				return nil
+			}
+			subSet = t[elt]
+		case map[string]interface{}:
+			key, ok := arg.(string)
+			if !ok {
+				return nil
+			}
+			subSet = t[key]
+		default:
+			return nil
+		}
+	}
+	return subSet
+}
+
 type Record struct {
-	Data []byte
-	Flow FlowReference
+	RawData []byte
+	Data    Strimap
+	Flow    FlowReference
 }
 
 type RecordSink interface {
@@ -99,6 +126,12 @@ type FlowKind string
 const (
 	FKClusterFlow FlowKind = "clusterflow"
 	FKFlow        FlowKind = "flow"
+
+	RegisterListener listenerEventType = iota
+	UnregisterListener
+
+	AuthHeaderKey = "Authorization"
+	RBACAllowList = "rbac-AllowList"
 )
 
 type FlowReference struct {
@@ -123,11 +156,6 @@ type ListenerEvent struct {
 
 type listenerEventType uint
 
-const (
-	RegisterListener listenerEventType = iota
-	UnregisterListener
-)
-
 func (r ListenerEventChannel) Register(l Listener) {
 	r <- ListenerEvent{
 		Listener:  l,
@@ -140,4 +168,8 @@ func (r ListenerEventChannel) Unregister(l Listener) {
 		Listener:  l,
 		EventType: UnregisterListener,
 	}
+}
+
+type Authenticator interface {
+	Authenticate(token string) (authv1.UserInfo, error)
 }
