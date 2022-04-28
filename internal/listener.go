@@ -70,6 +70,7 @@ type ListenerRegistry interface {
 
 type Listener interface {
 	Send(Record)
+	Flow() types.NamespacedName
 }
 
 type listener struct {
@@ -104,6 +105,10 @@ func (l listener) Send(r Record) {
 
 unregister:
 	go l.reg.Unregister(l)
+}
+
+func (l listener) Flow() types.NamespacedName {
+	return l.flow
 }
 
 func ExtractFlow(req *http.Request) (res types.NamespacedName, err error) {

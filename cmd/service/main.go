@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	// "k8s.io/apimachinery/pkg/runtime"
@@ -23,10 +24,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-// var (
-// 	scheme = runtime.NewScheme()
-// )
-
 func main() {
 	var ingestAddr string
 	var listenAddr string
@@ -35,21 +32,6 @@ func main() {
 	pflag.Parse()
 
 	var logs log.Sink = log.NewWriterSink(os.Stdout)
-
-	// mgrOptions := ctrl.Options{
-	// 	Scheme: scheme,
-	// 	// MetricsBindAddress: metricsAddr,
-	// 	// LeaderElection:     enableLeaderElection,
-	// 	// LeaderElectionID:   "logging-operator." + loggingv1beta1.GroupVersion.Group,
-	// 	// MapperProvider:     k8sutil.NewCached,
-	// 	Port: 9443,
-	// }
-
-	// mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOptions)
-	// if err != nil {
-	// 	log.Error(err, "unable to start manager")
-	// 	os.Exit(1)
-	// }
 
 	records := make(internal.RecordsChannel)
 	listenerReg := make(internal.ListenerEventChannel)
@@ -183,5 +165,9 @@ start:
 }
 
 func generateReconcileEvent(listeners []internal.Listener) internal.ReconcileEvent {
-	return internal.ReconcileEvent{}
+	requests := []types.NamespacedName{}
+	for _, l := range listeners {
+		requests = append(requests, l.Flow())
+	}
+	return internal.ReconcileEvent{Requests: requests}
 }
