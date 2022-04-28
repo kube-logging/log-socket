@@ -8,7 +8,8 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/siliconbrain/gologlite v1.0.0
 	github.com/spf13/pflag v1.0.5
-	k8s.io/apimachinery v0.23.5
+	k8s.io/apimachinery v0.23.6
+	k8s.io/client-go v0.23.5
 	sigs.k8s.io/controller-runtime v0.11.2
 )
 
@@ -46,7 +47,6 @@ require (
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
-	github.com/stretchr/testify v1.7.1 // indirect
 	github.com/wayneashleyberry/terminal-dimensions v1.0.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
@@ -64,7 +64,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	k8s.io/api v0.23.5 // indirect
 	k8s.io/apiextensions-apiserver v0.23.5 // indirect
-	k8s.io/client-go v0.23.5 // indirect
 	k8s.io/component-base v0.23.5 // indirect
 	k8s.io/klog/v2 v2.40.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20220114203427-a0453230fd26 // indirect

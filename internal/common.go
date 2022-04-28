@@ -14,6 +14,7 @@ var (
 
 type Record struct {
 	Data []byte
+	Flow FlowReference
 }
 
 type RecordSink interface {

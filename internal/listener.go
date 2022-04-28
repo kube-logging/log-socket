@@ -16,7 +16,7 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 	server := &http.Server{
 		Addr: addr,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			log.Event(logs, "new listener", log.V(1), log.Fields{"req": r})
+			log.Event(logs, "new listener", log.V(1), log.Fields{"headers": r.Header})
 
 			// request:
 			// * token
@@ -48,6 +48,13 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 				// TODO: add auth info
 			}
 			reg.Register(l)
+			go func() {
+				for {
+					if typ, _, err := wsConn.ReadMessage(); typ == websocket.CloseMessage || err != nil {
+						return
+					}
+				}
+			}()
 			wsConn.SetCloseHandler(func(code int, text string) error {
 				log.Event(logs, "websocket connection closing", log.Fields{"code": code, "text": text})
 				reg.Unregister(l)

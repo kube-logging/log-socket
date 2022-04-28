@@ -62,7 +62,27 @@ func (t *WriterSink) Record(message string, fields log.FieldSet) {
 	_, _ = io.WriteString(t.writer, time.Now().UTC().Format(time.RFC3339))
 	_, _ = io.WriteString(t.writer, " ] ")
 	_, _ = io.WriteString(t.writer, message)
-	_, _ = io.WriteString(t.writer, " | ")
-	_ = json.NewEncoder(t.writer).Encode(fields)
+	if !empty(fields) {
+		_, _ = io.WriteString(t.writer, " | ")
+		if err := json.NewEncoder(t.writer).Encode(fields); err != nil {
+			_, _ = io.WriteString(t.writer, "error: ")
+			_, _ = io.WriteString(t.writer, err.Error())
+		}
+	}
 	_, _ = fmt.Fprintln(t.writer)
+}
+
+func empty(fields log.FieldSet) bool {
+	if fields == nil {
+		return true
+	}
+	if fieldMap, ok := fields.(Fields); ok && len(fieldMap) == 0 {
+		return true
+	}
+	hasElem := false
+	fields.ForEachField(func(name string, value interface{}) bool {
+		hasElem = true
+		return true
+	})
+	return !hasElem
 }

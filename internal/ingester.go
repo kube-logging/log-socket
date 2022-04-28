@@ -4,10 +4,13 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/banzaicloud/log-socket/log"
 )
+
+const HealthCheckEndpoint = "/healthz"
 
 func Ingest(addr string, records RecordSink, logs log.Sink, stopSignal Handleable, terminateSignal Handleable) {
 	logs = log.WithFields(logs, log.Fields{"task": "log ingestion"})
@@ -16,6 +19,27 @@ func Ingest(addr string, records RecordSink, logs log.Sink, stopSignal Handleabl
 		Addr: addr,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			log.Event(logs, "HTTP server received request", log.V(2), log.Fields{"request": r})
+
+			if r.URL.Path == HealthCheckEndpoint {
+				log.Event(logs, "health check", log.V(1))
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			elts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+			if len(elts) < 1 {
+				http.Error(w, "invalid URL path", http.StatusNotFound)
+				return
+			}
+
+			var flow FlowReference
+			flow.Kind, flow.Namespace, flow.Name = FlowKind(elts[0]), elts[1], elts[2]
+			switch flow.Kind {
+			case FKClusterFlow, FKFlow:
+			default:
+				http.Error(w, "invalid flow kind", http.StatusBadRequest)
+				return
+			}
 
 			data, err := io.ReadAll(r.Body)
 			if err != nil {
@@ -30,7 +54,7 @@ func Ingest(addr string, records RecordSink, logs log.Sink, stopSignal Handleabl
 			}
 			rec := Record{
 				Data: data,
-				// TODO: extract metadata from headers
+				Flow: flow,
 			}
 			log.Event(logs, "got log record via HTTP", log.V(1), log.Fields{"record": rec})
 			records.Push(rec)
