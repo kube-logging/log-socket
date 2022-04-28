@@ -55,6 +55,8 @@ func main() {
 
 	dialer := *websocket.DefaultDialer
 
+	path := pathpkg.Join("/", flowKind, flowNamespace, flowName)
+
 	var listenURL *url.URL
 	if listenAddr == "" {
 		cfg, err := ctrl.GetConfig()
@@ -70,7 +72,6 @@ func main() {
 
 		dialer.TLSClientConfig = tlsCfg
 
-		path := pathpkg.Join("/", flowKind, flowNamespace, flowName)
 		listenURL, err = proxyURL(cfg, svcNamespace, "services", svcName, true, svcPort, path)
 		if err != nil {
 			log.Event(logs, "failed to generate K8s API server proxy URL for service", log.Error(err), log.Fields{
@@ -84,11 +85,15 @@ func main() {
 		}
 	} else {
 		var err error
+		if !strings.Contains(listenAddr, "://") {
+			listenAddr = "wss://" + listenAddr
+		}
 		listenURL, err = url.Parse(listenAddr)
 		if err != nil {
 			log.Event(logs, "failed to parse listen address", log.Error(err))
 			return
 		}
+		listenURL.Path = pathpkg.Join(listenURL.Path, path)
 	}
 
 	listenURL.Scheme = "wss"

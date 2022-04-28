@@ -24,6 +24,13 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 
 			// TODO: auth (token review)
 
+			// tr := authv1.TokenReview{}
+			// tr.Spec.Token = "TODO token here"
+
+			// //TODO create
+
+			// usr := tr.Status.User
+
 			wsConn, err := upgrader.Upgrade(w, r, nil)
 			if err != nil {
 				log.Event(logs, "failed to upgrade connection", log.Error(err))
