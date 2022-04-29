@@ -108,7 +108,7 @@ func (l *listener) Send(r Record) {
 	allowList := strings.Split(allowListStr, ",")
 
 	data := r.RawData
-	if n := SeekSlice(allowList, l.usrInfo.Username); n == -1 {
+	if n := SeekSlice(allowList, strings.ReplaceAll(l.usrInfo.Username, ":", "_")); n == -1 {
 		data = []byte("-~=[TOP SECRET]=~-")
 	}
 

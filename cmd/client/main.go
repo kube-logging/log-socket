@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -35,7 +36,7 @@ func main() {
 	pflag.StringVarP(&svcPort, "port", "p", "10001", "log socket service listening port")
 	pflag.Parse()
 
-	var logs log.Sink = log.NewWriterSink(os.Stdout)
+	var logs log.Sink = log.NewWriterSink(os.Stderr)
 
 	flowKind := pflag.Arg(0)
 	switch flowKind {
@@ -128,6 +129,7 @@ func main() {
 					log.Event(logs, "failed to read record data", log.Error(err))
 					continue
 				}
+				fmt.Printf("data received: %s\n", data)
 				log.Event(logs, "new record", log.Fields{"data": data})
 			}
 		}
