@@ -24,6 +24,9 @@ func GetIn(m interface{}, args ...interface{}) interface{} {
 			if !ok {
 				return nil
 			}
+			if elt < 0 || elt >= len(t) {
+				return nil
+			}
 			subSet = t[elt]
 		case map[string]interface{}:
 			key, ok := arg.(string)
