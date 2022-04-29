@@ -46,7 +46,7 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 
 			log.Event(logs, "successful websocket upgrade", log.V(1), log.Fields{"req": r, "wsConn": wsConn})
 
-			l := listener{
+			l := &listener{
 				Conn:    wsConn,
 				reg:     reg,
 				logs:    logs,
@@ -97,7 +97,7 @@ func (l listener) Equals(o listener) bool {
 	return l.Conn == o.Conn
 }
 
-func (l listener) Send(r Record) {
+func (l *listener) Send(r Record) {
 
 	// TODO: complete auth check here
 	allowListStr, ok := GetIn(r.Data, "kubernetes", "labels", RBACAllowList).(string)
