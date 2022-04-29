@@ -16,7 +16,7 @@ const (
 	UnregisterListener
 
 	AuthHeaderKey = "Authorization"
-	RBACAllowList = "rbac-AllowList"
+	RBACAllowList = "rbac/AllowList"
 )
 
 var (

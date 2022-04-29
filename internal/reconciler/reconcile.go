@@ -153,8 +153,10 @@ func (r *Reconciler) HTTPOuput(flowRef internal.FlowReference) *output.HTTPOutpu
 			Type: "json",
 		},
 		Buffer: &output.Buffer{
-			Type:      "memory",
-			FlushMode: "immediate",
+			Type:             "memory",
+			FlushMode:        "immediate",
+			QueueLimitLength: 1,
+			OverflowAction:   "drop_oldest_chunk",
 		},
 	}
 }
