@@ -8,6 +8,17 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+const (
+	FKClusterFlow FlowKind = "clusterflow"
+	FKFlow        FlowKind = "flow"
+
+	RegisterListener listenerEventType = iota
+	UnregisterListener
+
+	AuthHeaderKey = "Authorization"
+	RBACAllowList = "rbac-AllowList"
+)
+
 var (
 	DefLabel          = map[string]string{"app.kubernetes.io/created-by": "log-socket"}
 	FlowAnnotationKey = "flowRef"
@@ -125,17 +136,6 @@ func (l *HandleableLatch) watch() {
 type ReconcileEventChannel chan ReconcileEvent
 
 type FlowKind string
-
-const (
-	FKClusterFlow FlowKind = "clusterflow"
-	FKFlow        FlowKind = "flow"
-
-	RegisterListener listenerEventType = iota
-	UnregisterListener
-
-	AuthHeaderKey = "Authorization"
-	RBACAllowList = "rbac-AllowList"
-)
 
 type FlowReference struct {
 	types.NamespacedName

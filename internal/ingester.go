@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -54,19 +55,27 @@ func Ingest(addr string, records RecordSink, logs log.Sink, stopSignal Handleabl
 				return
 			}
 
-			rec := Record{
-				RawData: data,
-				Flow:    flow,
-			}
+			dataSet := bytes.Split(data, []byte{'\n'})
+			for _, data := range dataSet {
 
-			if err := json.Unmarshal(data, &rec.Data); err != nil {
-				log.Event(logs, "failed to parse log data", log.Error(err))
-				http.Error(w, "failed to parse log data", http.StatusBadRequest)
-				return
-			}
+				if len(data) == 0 {
+					continue
+				}
 
-			log.Event(logs, "got log record via HTTP", log.V(1), log.Fields{"record": rec})
-			records.Push(rec)
+				rec := Record{
+					RawData: data,
+					Flow:    flow,
+				}
+
+				if err := json.Unmarshal(data, &rec.Data); err != nil {
+					log.Event(logs, "failed to parse log data", log.Error(err), log.Fields{"data": string(data)})
+					http.Error(w, "failed to parse log data", http.StatusBadRequest)
+					return
+				}
+
+				log.Event(logs, "got log record via HTTP", log.V(1), log.Fields{"record": rec})
+				records.Push(rec)
+			}
 			w.WriteHeader(http.StatusOK)
 		}),
 	}
