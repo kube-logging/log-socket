@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/spf13/pflag"
@@ -27,7 +28,9 @@ import (
 func main() {
 	var ingestAddr string
 	var listenAddr string
-	pflag.StringVar(&ingestAddr, "ingest-addr", ":10000", "address where the service ingests logs")
+	var serviceAddr string
+	pflag.StringVar(&ingestAddr, "ingest-addr", ":10000", "local address where the service ingests logs")
+	pflag.StringVar(&serviceAddr, "service-addr", ":10000", "remote address where the service ingests logs")
 	pflag.StringVar(&listenAddr, "listen-addr", ":10001", "address where the service accepts WebSocket listeners")
 	pflag.Parse()
 
@@ -69,7 +72,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	rec := reconciler.New(ingestAddr, c)
+
+	if !strings.Contains(serviceAddr, "://") {
+		serviceAddr = "http://" + serviceAddr
+	}
+
+	rec := reconciler.New(serviceAddr, c)
 	authenticator := internal.TokenReviewAuthenticator{Client: c}
 
 	go func() {
