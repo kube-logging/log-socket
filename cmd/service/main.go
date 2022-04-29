@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/spf13/pflag"
+	authv1 "k8s.io/api/authentication/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -59,6 +60,9 @@ func main() {
 
 	s := runtime.NewScheme()
 	if err := loggingv1beta1.AddToScheme(s); err != nil {
+		panic(err)
+	}
+	if err := authv1.AddToScheme(s); err != nil {
 		panic(err)
 	}
 	c, err := client.New(ctrl.GetConfigOrDie(), client.Options{Scheme: s})

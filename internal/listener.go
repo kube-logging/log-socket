@@ -100,18 +100,29 @@ func (l listener) Equals(o listener) bool {
 func (l listener) Send(r Record) {
 
 	// TODO: complete auth check here
-	x := GetIn(r.Data, "kubernetes", "labels", RBACAllowList)
-	_ = x
+	allowListStr, ok := GetIn(r.Data, "kubernetes", "labels", RBACAllowList).(string)
+	if !ok {
+		log.Event(l.logs, "RBAC list missing from log record")
+		return
+	}
+	allowList := strings.Split(allowListStr, ",")
+
+	data := r.RawData
+	if n := SeekSlice(allowList, l.usrInfo.Username); n == -1 {
+		data = []byte("-~=[TOP SECRET]=~-")
+	}
 
 	wc, err := l.Conn.NextWriter(websocket.BinaryMessage)
 	if err != nil {
 		log.Event(l.logs, "an error occurred while getting next writer for websocket connection", log.Error(err))
 		goto unregister
 	}
-	if _, err := wc.Write(r.RawData); err != nil {
+
+	if _, err := wc.Write(data); err != nil {
 		log.Event(l.logs, "an error occurred while writing record data to websocket connection", log.Error(err))
 		goto unregister
 	}
+
 	if err := wc.Close(); err != nil {
 		log.Event(l.logs, "an error occurred while flushing frame to websocket connection", log.Error(err))
 		goto unregister
@@ -135,4 +146,13 @@ func ExtractFlow(req *http.Request) (res FlowReference, err error) {
 
 	res.Kind, res.Namespace, res.Name = FlowKind(elts[0]), elts[1], elts[2]
 	return
+}
+
+func SeekSlice(slice []string, str string) int {
+	for i, s := range slice {
+		if s == str {
+			return i
+		}
+	}
+	return -1
 }
