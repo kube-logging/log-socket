@@ -15,7 +15,7 @@ const (
 	RegisterListener listenerEventType = iota
 	UnregisterListener
 
-	AuthHeaderKey = "Authorization"
+	AuthHeaderKey = "X-Authorization"
 	RBACAllowList = "rbac/AllowList"
 )
 

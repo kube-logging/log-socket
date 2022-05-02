@@ -14,14 +14,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/banzaicloud/log-socket/log"
 	"github.com/gorilla/websocket"
 	"github.com/spf13/pflag"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
-)
 
-const AuthHeaderKey = "Authorization"
+	"github.com/banzaicloud/log-socket/internal"
+	"github.com/banzaicloud/log-socket/log"
+)
 
 func main() {
 	var authToken string
@@ -104,7 +104,7 @@ func main() {
 	}
 	dialer.TLSClientConfig.InsecureSkipVerify = true
 
-	wsConn, _, err := dialer.DialContext(context.Background(), listenURL.String(), http.Header{AuthHeaderKey: []string{authToken}})
+	wsConn, _, err := dialer.DialContext(context.Background(), listenURL.String(), http.Header{internal.AuthHeaderKey: []string{authToken}})
 	if err != nil {
 		log.Event(logs, "failed to open websocket connection", log.Error(err), log.Fields{"url": listenURL})
 		return
