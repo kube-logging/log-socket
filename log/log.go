@@ -61,9 +61,9 @@ func (t *WriterSink) Record(message string, fields log.FieldSet) {
 	_, _ = io.WriteString(t.writer, time.Now().UTC().Format(time.RFC3339))
 	_, _ = io.WriteString(t.writer, " ] ")
 	_, _ = io.WriteString(t.writer, message)
-	if !empty(fields) {
+	if fields := log.CollapseFieldSets(fields); !empty(fields) {
 		_, _ = io.WriteString(t.writer, " | ")
-		_, _ = fmt.Fprintf(t.writer, "%+v", log.CollapseFieldSets(fields))
+		_, _ = fmt.Fprintf(t.writer, "%+v", fields)
 	}
 	_, _ = fmt.Fprintln(t.writer)
 }
