@@ -24,6 +24,7 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 
 			nn, err := ExtractFlow(r)
 			if err != nil {
+				log.Event(logs, "failed to extract flow from request", log.Error(err), log.Fields{"request": r})
 				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}
@@ -43,13 +44,6 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 				metrics.Listeners(metrics.MListenerRejected, -1, string(nn.Kind), nn.Namespace, nn.Name, "N/A")
 				log.Event(logs, "authentication failed", log.Error(err), log.Fields{"token": authToken})
 				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-
-			flow, err := ExtractFlow(r)
-			if err != nil {
-				log.Event(logs, "failed to extract flow from request", log.Error(err), log.Fields{"request": r})
-				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 
