@@ -72,6 +72,8 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 				reg.Unregister(l)
 				return nil
 			})
+
+			log.Event(logs, "listener connected", log.Fields{"listener": l})
 		}),
 		TLSConfig: tlsConfig,
 	}
