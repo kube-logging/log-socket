@@ -5,14 +5,17 @@
 replicaCount: 1
 
 image:
-  repository: banzaicloud/log-socket
-  pullPolicy: IfNotPresent
+  repository: ghcr.io/banzaicloud/log-socket
+  pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
 
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
+
+rbac:
+  enabled: true
 
 serviceAccount:
   # Specifies whether a service account should be created

@@ -60,3 +60,15 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Provides the namespace the chart will be installed in using the builtin .Release.Namespace,
+or, if provided, a manually overwritten namespace value.
+*/}}
+{{- define "log-socket.namespace" -}}
+{{- if .Values.namespaceOverride -}}
+{{ .Values.namespaceOverride -}}
+{{- else -}}
+{{ .Release.Namespace }}
+{{- end -}}
+{{- end -}}
