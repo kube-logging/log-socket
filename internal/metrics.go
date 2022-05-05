@@ -24,6 +24,10 @@ func NewMetrics(logs log.Sink) *Metrics {
 			Namespace: metricNamespace,
 			Name:      "bytes_received",
 		}, []string{flowKindLabelName, flowNamespaceLabelName, flowNameLabelName})),
+		bytesSent: registered(prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: metricNamespace,
+			Name:      "bytes_sent",
+		}, []string{recordStatusLabelName, flowKindLabelName, flowNamespaceLabelName, flowNameLabelName, listenerUserLabelName})),
 		currentListeners: registered(prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: metricNamespace,
 			Name:      "current_listeners",
@@ -36,14 +40,6 @@ func NewMetrics(logs log.Sink) *Metrics {
 			Namespace: metricNamespace,
 			Name:      "healthchecks",
 		})),
-		listenerBytes: registered(prometheus.NewCounterVec(prometheus.CounterOpts{
-			Namespace: metricNamespace,
-			Name:      "bytes",
-		}, []string{recordStatusLabelName, flowKindLabelName, flowNamespaceLabelName, flowNameLabelName, listenerUserLabelName})),
-		listenerRecords: registered(prometheus.NewCounterVec(prometheus.CounterOpts{
-			Namespace: metricNamespace,
-			Name:      "records",
-		}, []string{recordStatusLabelName, flowKindLabelName, flowNamespaceLabelName, flowNameLabelName, listenerUserLabelName})),
 		listeners: registered(prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: metricNamespace,
 			Name:      "listeners",
@@ -52,6 +48,10 @@ func NewMetrics(logs log.Sink) *Metrics {
 			Namespace: metricNamespace,
 			Name:      "records_received",
 		}, []string{flowKindLabelName, flowNamespaceLabelName, flowNameLabelName})),
+		recordsSent: registered(prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: metricNamespace,
+			Name:      "records_sent",
+		}, []string{recordStatusLabelName, flowKindLabelName, flowNamespaceLabelName, flowNameLabelName, listenerUserLabelName})),
 	}
 }
 
@@ -59,13 +59,13 @@ type Metrics struct {
 	logs log.Sink
 
 	bytesReceived    *prometheus.CounterVec
+	bytesSent        *prometheus.CounterVec
 	currentListeners prometheus.Gauge
 	errors           prometheus.Counter
 	healthChecks     prometheus.Counter
-	listenerBytes    *prometheus.CounterVec
-	listenerRecords  *prometheus.CounterVec
 	listeners        *prometheus.CounterVec
 	recordsReceived  *prometheus.CounterVec
+	recordsSent      *prometheus.CounterVec
 }
 
 func (ms *Metrics) CurrentListeners(cnt int) {
@@ -100,14 +100,14 @@ func (ms *Metrics) LogRecordReceived(r Record) {
 
 func (ms *Metrics) LogRecordRedacted(l Listener, r Record) {
 	labels := assembleLabels(prometheus.Labels{recordStatusLabelName: "redacted"}, flowLabels(l.Flow()), userLabels(l.User()))
-	ms.listenerBytes.With(labels).Add(float64(len(r.RawData)))
-	ms.listenerRecords.With(labels).Inc()
+	ms.bytesSent.With(labels).Add(float64(len(r.RawData)))
+	ms.recordsSent.With(labels).Inc()
 }
 
 func (ms *Metrics) LogRecordTransmitted(l Listener, r Record) {
 	labels := assembleLabels(prometheus.Labels{recordStatusLabelName: "transmitted"}, flowLabels(l.Flow()), userLabels(l.User()))
-	ms.listenerBytes.With(labels).Add(float64(len(r.RawData)))
-	ms.listenerRecords.With(labels).Inc()
+	ms.bytesSent.With(labels).Add(float64(len(r.RawData)))
+	ms.recordsSent.With(labels).Inc()
 }
 
 func registered[T prometheus.Collector](metric T) T {
