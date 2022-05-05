@@ -22,10 +22,10 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			log.Event(logs, "new listener connection request", log.V(2), log.Fields{"request": r})
 
-			nn, err := ExtractFlow(r)
+			flow, err := ExtractFlow(r)
 			if err != nil {
 				log.Event(logs, "failed to extract flow from request", log.Error(err), log.Fields{"request": r})
-				http.Error(w, err.Error(), http.StatusNotFound)
+				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 
@@ -33,7 +33,7 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 
 			authToken := r.Header.Get(AuthHeaderKey)
 			if authToken == "" {
-				metrics.Listeners(metrics.MListenerRejected, -1, string(nn.Kind), nn.Namespace, nn.Name, "N/A")
+				metrics.Listeners(metrics.MListenerRejected, -1, string(flow.Kind), flow.Namespace, flow.Name, "N/A")
 				log.Event(logs, "no authentication token in request headers", log.Fields{"headers": r.Header})
 				http.Error(w, "missing authentication token", http.StatusForbidden)
 				return
@@ -41,7 +41,7 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 
 			usrInfo, err := authenticator.Authenticate(authToken)
 			if err != nil {
-				metrics.Listeners(metrics.MListenerRejected, -1, string(nn.Kind), nn.Namespace, nn.Name, "N/A")
+				metrics.Listeners(metrics.MListenerRejected, -1, string(flow.Kind), flow.Namespace, flow.Name, "N/A")
 				log.Event(logs, "authentication failed", log.Error(err), log.Fields{"token": authToken})
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -63,11 +63,11 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 				flow:    flow,
 				usrInfo: usrInfo,
 			}
-			metrics.Listeners(metrics.MListenerApproved, -1, string(nn.Kind), nn.Namespace, nn.Name, l.usrInfo.Username)
+			metrics.Listeners(metrics.MListenerApproved, -1, string(flow.Kind), flow.Namespace, flow.Name, l.usrInfo.Username)
 			reg.Register(l)
 			go l.readLoop()
 			wsConn.SetCloseHandler(func(code int, text string) error {
-				metrics.Listeners(metrics.MListenerRemoved, -1, string(nn.Kind), nn.Namespace, nn.Name, l.usrInfo.Username)
+				metrics.Listeners(metrics.MListenerRemoved, -1, string(flow.Kind), flow.Namespace, flow.Name, l.usrInfo.Username)
 				log.Event(logs, "websocket connection closed", log.V(1), log.Fields{"code": code, "text": text, "listener": l})
 				reg.Unregister(l)
 				return nil
