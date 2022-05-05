@@ -8,13 +8,15 @@ type ListenerAction = MetricKey
 const (
 	LogPrefix string = "log_socket_"
 
-	MTotalLog      MetricKey = LogPrefix + "total_log"
-	MLogReceived   LogAction = "received"
+	MLog     MetricKey = LogPrefix + "event"
+	MLogRecv MetricKey = LogPrefix + "event_received"
+
 	MLogTransfered LogAction = "transferred"
 	MLogFiltered   LogAction = "filtered"
 
-	MTotalBytes       MetricKey   = LogPrefix + "total_bytes"
-	MBytesReceived    BytesAction = "received"
+	MTotalBytes MetricKey = LogPrefix + "bytes"
+	MBytesRecv  MetricKey = LogPrefix + "bytes_received"
+
 	MBytesTransferred BytesAction = "transferred"
 	MBytesFiltered    BytesAction = "filtered"
 
@@ -25,22 +27,38 @@ const (
 	MListenerRejected ListenerAction = "rejected"
 	MListenerRemoved  ListenerAction = "removed"
 
-	MHealthChecks MetricKey = LogPrefix + "total_healthchecks"
+	MListener MetricKey = LogPrefix + "listener"
+
+	MHealthChecks MetricKey = LogPrefix + "healthchecks"
 
 	MError MetricKey = "errors"
 
-	MStatus MetricKey = "status"
+	MStatus    MetricKey = "status"
+	MType      MetricKey = "type"
+	MNamespace MetricKey = "namespace"
+	MFlow      MetricKey = "flowname"
+	MUser      MetricKey = "user"
 )
 
-func Log(action LogAction) {
-	Record(Key(MTotalLog, MStatus), Inc(), action)
+var commonMetricKeys = []string{MStatus, MType, MNamespace, MFlow, MUser}
+
+func LogReceived() {
+	Record(Key(MLogRecv), Inc())
 }
 
-func Bytes(action BytesAction, val int) {
-	Record(Key(MTotalBytes, MStatus), Add(float64(val)), action)
+func Log(action LogAction, keys ...string) {
+	Record(Key(MLog, commonMetricKeys...), Inc(), append([]string{action}, keys...)...)
 }
 
-func Listeners(action ListenerAction, v ...float64) {
+func BytesReceived(val int) {
+	Record(Key(MBytesRecv), Add(float64(val)))
+}
+
+func Bytes(action BytesAction, val int, keys ...string) {
+	Record(Key(MTotalBytes, commonMetricKeys...), Add(float64(val)), append([]string{action}, keys...)...)
+}
+
+func ListenersTotal(action ListenerAction, v float64) {
 	switch action {
 	case MListenerRejected:
 		Record(Key(MListeners, MStatus), Inc(), MListenerRejected)
@@ -51,13 +69,23 @@ func Listeners(action ListenerAction, v ...float64) {
 	case MListenerTotal:
 		Record(Key(MListeners, MStatus), Inc(), MListenerTotal)
 	case MListenerCurrent:
-		if len(v) > 0 {
-			Record(Key(MListeners, MStatus), Set(v[0]), MListenerCurrent)
-		} else {
-			Record(Key(MListeners, MStatus), Set(0), MListenerCurrent)
+		if v >= 0 {
+			Record(Key(MListeners, MStatus), Set(v), MListenerCurrent)
 		}
 
 	}
+}
+
+func Listeners(action ListenerAction, val int, keys ...string) {
+	switch action {
+	case MListenerRejected:
+		Record(Key(MListener, commonMetricKeys...), Inc(), append([]string{action}, keys...)...)
+	case MListenerApproved:
+		Record(Key(MListener, commonMetricKeys...), Inc(), append([]string{action}, keys...)...)
+	case MListenerRemoved:
+		Record(Key(MListener, commonMetricKeys...), Inc(), append([]string{action}, keys...)...)
+	}
+	ListenersTotal(action, float64(val))
 }
 
 func HealthCheck() {

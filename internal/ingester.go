@@ -73,8 +73,8 @@ func Ingest(addr string, records RecordSink, logs log.Sink, stopSignal Handleabl
 					continue
 				}
 
-				metrics.Log(metrics.MLogReceived)
-				metrics.Bytes(metrics.MBytesReceived, len(data))
+				metrics.LogReceived()
+				metrics.BytesReceived(len(data))
 
 				rec := Record{
 					RawData: data,
