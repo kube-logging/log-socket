@@ -3,6 +3,7 @@ package internal
 import (
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -109,7 +110,7 @@ func (l *listener) Send(r Record) {
 
 	data := r.RawData
 	if n := SeekSlice(allowList, strings.ReplaceAll(l.usrInfo.Username, ":", "_")); n == -1 {
-		data = []byte("-~=[TOP SECRET]=~-")
+		data = []byte(fmt.Sprintf(`{"error": "Permission denied to access %s logs for %s"}`, GetIn(r.Data, "kubernetes", "pod_name").(string), l.usrInfo.Username))
 	}
 
 	wc, err := l.Conn.NextWriter(websocket.BinaryMessage)

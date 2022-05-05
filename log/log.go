@@ -1,7 +1,6 @@
 package log
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"sync"
@@ -64,10 +63,7 @@ func (t *WriterSink) Record(message string, fields log.FieldSet) {
 	_, _ = io.WriteString(t.writer, message)
 	if !empty(fields) {
 		_, _ = io.WriteString(t.writer, " | ")
-		if err := json.NewEncoder(t.writer).Encode(fields); err != nil {
-			_, _ = io.WriteString(t.writer, "error: ")
-			_, _ = io.WriteString(t.writer, err.Error())
-		}
+		_, _ = fmt.Fprintf(t.writer, "%+v", log.CollapseFieldSets(fields))
 	}
 	_, _ = fmt.Fprintln(t.writer)
 }

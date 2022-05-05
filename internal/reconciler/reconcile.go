@@ -181,7 +181,7 @@ func (r *Reconciler) ReconcileFlow(ctx context.Context, ref internal.FlowReferen
 		if err = r.Client.Get(ctx, ref.NamespacedName, &flow); err != nil {
 			return
 		}
-		flow.Spec.GlobalOutputRefs = updater(flow.Spec.GlobalOutputRefs)
+		flow.Spec.LocalOutputRefs = updater(flow.Spec.LocalOutputRefs)
 		if err = r.Client.Update(ctx, &flow); err != nil {
 			return
 		}

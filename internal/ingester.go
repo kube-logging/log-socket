@@ -20,7 +20,7 @@ func Ingest(addr string, records RecordSink, logs log.Sink, stopSignal Handleabl
 	server := &http.Server{
 		Addr: addr,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			log.Event(logs, "HTTP server received request", log.V(2), log.Fields{"request": r})
+			log.Event(logs, "HTTP server received request", log.V(2), log.Fields{"request": r.Body})
 
 			if r.URL.Path == HealthCheckEndpoint {
 				log.Event(logs, "health check", log.V(1))
