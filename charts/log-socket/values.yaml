@@ -39,6 +39,9 @@ securityContext: {}
   # runAsNonRoot: true
   # runAsUser: 1000
 
+serviceMonitor:
+  enabled: true
+
 service:
   type: ClusterIP
   ingestPort: 10000
