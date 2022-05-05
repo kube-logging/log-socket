@@ -29,7 +29,7 @@ const (
 
 	MError MetricKey = "errors"
 
-	KStatus MetricKey = "status"
+	MStatus MetricKey = "status"
 )
 
 func Log(action LogAction) {
