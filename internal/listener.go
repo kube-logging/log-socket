@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gorilla/websocket"
+	"go.uber.org/multierr"
 	authv1 "k8s.io/api/authentication/v1"
 
 	"github.com/banzaicloud/log-socket/internal/metrics"
@@ -132,21 +133,17 @@ func (l listener) Format(f fmt.State, c rune) {
 func (l *listener) Send(r Record) {
 	log.Event(l.logs, "processing log record", log.V(2), log.Fields{"listener": l, "record": r})
 
-	allowListStr, ok := GetIn(r.Data, "kubernetes", "labels", RBACAllowList).(string)
-	if !ok {
-		metrics.Log(metrics.MLogFiltered, string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
-		metrics.Bytes(metrics.MBytesFiltered, len(r.RawData), string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
-		log.Event(l.logs, "RBAC list missing from log record", log.V(1), log.Fields{"record": r})
-		return
+	rules, err := loadRBACRules(r)
+	if err != nil {
+		log.Event(l.logs, "an error occurred while loading RBAC rules from record", log.V(1), log.Fields{"record": r})
 	}
-	allowList := strings.Split(allowListStr, ",")
 
 	data := r.RawData
-	if !hasItem(allowList, strings.ReplaceAll(l.usrInfo.Username, ":", "_")) {
+	if !rules.canView(l.usrInfo) {
 		metrics.Log(metrics.MLogFiltered, string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
 		metrics.Bytes(metrics.MBytesFiltered, len(r.RawData), string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
-		log.Event(l.logs, "listener does not have permission to view log record", log.V(1), log.Fields{"listener": l, "record": r, "allowList": allowList})
-		data = []byte(fmt.Sprintf(`{"error": "Permission denied to access %s logs for %s"}`, GetIn(r.Data, "kubernetes", "pod_name").(string), l.usrInfo.Username))
+		log.Event(l.logs, "listener does not have permission to view log record", log.V(1), log.Fields{"listener": l, "record": r, "rules": rules})
+		data = []byte(fmt.Sprintf(`{"error": "Permission denied to access %s logs for %s"}`, r.Data.Kubernetes.PodName, l.usrInfo.Username))
 	} else {
 		metrics.Log(metrics.MLogTransfered, string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
 		metrics.Bytes(metrics.MBytesTransferred, len(r.RawData), string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
@@ -198,6 +195,56 @@ func ExtractFlow(req *http.Request) (res FlowReference, err error) {
 		return
 	}
 	return res, errors.New("URL path is not a valid flow reference")
+}
+
+func loadRBACRules(r Record) (res rbacRules, err error) {
+	res = make(rbacRules)
+loop:
+	for k, v := range r.Data.Kubernetes.Labels {
+		const keyPrefix = "rbac/"
+		if strings.HasPrefix(k, keyPrefix) {
+			p := policy(v)
+			switch p {
+			case policyAllow, policyDeny:
+			default:
+				err = multierr.Append(err, invalidRBACRule{k, v})
+				continue loop
+			}
+			res[k[len(keyPrefix):]] = p
+		}
+	}
+	return
+}
+
+type rbacRules map[string]policy
+
+func (rs rbacRules) canView(userInfo authv1.UserInfo) bool {
+	key := userInfo.Username
+	// skip first 2 segments
+	key = key[strings.IndexRune(key, ':')+1:]
+	key = key[strings.IndexRune(key, ':')+1:]
+	key = strings.ReplaceAll(key, ":", "_")
+	if p, ok := rs[key]; ok { // user has custom policy
+		return p == policyAllow
+	}
+	if p, ok := rs["policy"]; ok { // user has no custom policy, try using default policy
+		return p == policyAllow
+	}
+	return false // default policy is deny
+}
+
+type policy string
+
+const policyAllow policy = "allow"
+const policyDeny policy = "deny"
+
+type invalidRBACRule struct {
+	key   string
+	value string
+}
+
+func (e invalidRBACRule) Error() string {
+	return fmt.Sprintf(`invalid RBAC rule "%s: %s"`, e.key, e.value)
 }
 
 func firstIndexOf[T comparable](slice []T, item T) int {
