@@ -10,6 +10,7 @@ import (
 	"github.com/gorilla/websocket"
 	authv1 "k8s.io/api/authentication/v1"
 
+	"github.com/banzaicloud/log-socket/internal/metrics"
 	"github.com/banzaicloud/log-socket/log"
 )
 
@@ -21,14 +22,18 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			log.Event(logs, "new listener", log.V(1), log.Fields{"headers": r.Header})
 
+			metrics.Listeners(metrics.MListenerTotal)
+
 			authToken := r.Header.Get(AuthHeaderKey)
 			if authToken == "" {
+				metrics.Listeners(metrics.MListenerRejected)
 				http.Error(w, "missing authentication token", http.StatusForbidden)
 				return
 			}
 
 			usrInfo, err := authenticator.Authenticate(authToken)
 			if err != nil {
+				metrics.Listeners(metrics.MListenerRejected)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -54,6 +59,7 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 				flow:    nn,
 				usrInfo: usrInfo,
 			}
+			metrics.Listeners(metrics.MListenerApproved)
 			reg.Register(l)
 			go func() {
 				for {
@@ -63,6 +69,7 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 				}
 			}()
 			wsConn.SetCloseHandler(func(code int, text string) error {
+				metrics.Listeners(metrics.MListenerRemoved)
 				log.Event(logs, "websocket connection closing", log.Fields{"code": code, "text": text})
 				reg.Unregister(l)
 				return nil
@@ -110,7 +117,12 @@ func (l *listener) Send(r Record) {
 
 	data := r.RawData
 	if n := SeekSlice(allowList, strings.ReplaceAll(l.usrInfo.Username, ":", "_")); n == -1 {
+		metrics.Log(metrics.MLogFiltered)
+		metrics.Bytes(metrics.MBytesFiltered, len(r.RawData))
 		data = []byte(fmt.Sprintf(`{"error": "Permission denied to access %s logs for %s"}`, GetIn(r.Data, "kubernetes", "pod_name").(string), l.usrInfo.Username))
+	} else {
+		metrics.Log(metrics.MLogTransfered)
+		metrics.Bytes(metrics.MBytesTransferred, len(r.RawData))
 	}
 
 	wc, err := l.Conn.NextWriter(websocket.BinaryMessage)

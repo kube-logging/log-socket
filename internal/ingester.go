@@ -4,15 +4,19 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
 
+	"github.com/banzaicloud/log-socket/internal/metrics"
 	"github.com/banzaicloud/log-socket/log"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const HealthCheckEndpoint = "/healthz"
+const MetricsEndpoint = "/metrics"
 
 func Ingest(addr string, records RecordSink, logs log.Sink, stopSignal Handleable, terminateSignal Handleable) {
 	logs = log.WithFields(logs, log.Fields{"task": "log ingestion"})
@@ -24,7 +28,15 @@ func Ingest(addr string, records RecordSink, logs log.Sink, stopSignal Handleabl
 
 			if r.URL.Path == HealthCheckEndpoint {
 				log.Event(logs, "health check", log.V(1))
+				metrics.HealthCheck()
 				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			if r.URL.Path == MetricsEndpoint {
+				log.Event(logs, "metrics", log.V(1))
+				fmt.Println(metrics.DefaultMetrics)
+				promhttp.Handler().ServeHTTP(w, r)
 				return
 			}
 
@@ -61,6 +73,9 @@ func Ingest(addr string, records RecordSink, logs log.Sink, stopSignal Handleabl
 				if len(data) == 0 {
 					continue
 				}
+
+				metrics.Log(metrics.MLogReceived)
+				metrics.Bytes(metrics.MBytesReceived, len(data))
 
 				rec := Record{
 					RawData: data,
