@@ -30,7 +30,7 @@ func main() {
 	var listenAddr string
 	var serviceAddr string
 	pflag.StringVar(&ingestAddr, "ingest-addr", ":10000", "local address where the service ingests logs")
-	pflag.StringVar(&serviceAddr, "service-addr", ":10000", "remote address where the service ingests logs")
+	pflag.StringVar(&serviceAddr, "service-addr", "log-socket.default.svc:10000", "remote address where the service ingests logs")
 	pflag.StringVar(&listenAddr, "listen-addr", ":10001", "address where the service accepts WebSocket listeners")
 	pflag.Parse()
 
