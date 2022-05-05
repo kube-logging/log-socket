@@ -29,14 +29,16 @@ func main() {
 	var svcName string
 	var svcNamespace string
 	var svcPort string
+	var verbosity int
 	pflag.StringVar(&authToken, "token", "", "token used for authentication")
 	pflag.StringVar(&listenAddr, "listen-addr", "", "address where the service accepts WebSocket listeners")
-	pflag.StringVarP(&svcName, "service", "s", "log-socket", "address where the service accepts WebSocket listeners")
+	pflag.StringVarP(&svcName, "service", "s", "log-socket", "name of the service that accepts WebSocket listeners")
 	pflag.StringVarP(&svcNamespace, "namespace", "n", "default", "log socket service namespace")
 	pflag.StringVarP(&svcPort, "port", "p", "10001", "log socket service listening port")
+	pflag.IntVarP(&verbosity, "verbosity", "v", verbosity, "log verbosity level")
 	pflag.Parse()
 
-	var logs log.Sink = log.NewWriterSink(os.Stderr)
+	var logs log.Sink = log.WithVerbosityFilter(log.NewWriterSink(os.Stderr), verbosity)
 
 	flowKind := pflag.Arg(0)
 	switch flowKind {

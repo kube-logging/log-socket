@@ -6,8 +6,10 @@ require (
 	github.com/banzaicloud/logging-operator/pkg/sdk v0.7.22
 	github.com/banzaicloud/operator-tools v0.28.4
 	github.com/gorilla/websocket v1.5.0
+	github.com/prometheus/client_golang v1.12.1
 	github.com/siliconbrain/gologlite v1.0.0
 	github.com/spf13/pflag v1.0.5
+	k8s.io/api v0.23.5
 	k8s.io/apimachinery v0.23.6
 	k8s.io/client-go v0.23.5
 	sigs.k8s.io/controller-runtime v0.11.2
@@ -42,7 +44,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.43.0 // indirect
-	github.com/prometheus/client_golang v1.12.1 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
@@ -62,7 +63,6 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-	k8s.io/api v0.23.5 // indirect
 	k8s.io/apiextensions-apiserver v0.23.5 // indirect
 	k8s.io/component-base v0.23.5 // indirect
 	k8s.io/klog/v2 v2.40.1 // indirect

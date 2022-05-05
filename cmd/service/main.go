@@ -30,12 +30,14 @@ func main() {
 	var ingestAddr string
 	var listenAddr string
 	var serviceAddr string
+	var verbosity int
 	pflag.StringVar(&ingestAddr, "ingest-addr", ":10000", "local address where the service ingests logs")
 	pflag.StringVar(&serviceAddr, "service-addr", "log-socket.default.svc:10000", "remote address where the service ingests logs")
 	pflag.StringVar(&listenAddr, "listen-addr", ":10001", "address where the service accepts WebSocket listeners")
+	pflag.IntVarP(&verbosity, "verbosity", "v", verbosity, "log verbosity level")
 	pflag.Parse()
 
-	var logs log.Sink = log.NewWriterSink(os.Stdout)
+	var logs log.Sink = log.WithVerbosityFilter(log.NewWriterSink(os.Stdout), verbosity)
 
 	records := make(internal.RecordsChannel)
 	listenerReg := make(internal.ListenerEventChannel)
@@ -64,14 +66,22 @@ func main() {
 
 	s := runtime.NewScheme()
 	if err := loggingv1beta1.AddToScheme(s); err != nil {
-		panic(err)
+		log.Event(logs, "an error occurred while adding API group to scheme", log.Error(err), log.Fields{"group": loggingv1beta1.GroupVersion, "scheme": s})
+		return
 	}
 	if err := authv1.AddToScheme(s); err != nil {
-		panic(err)
+		log.Event(logs, "an error occurred while adding API group to scheme", log.Error(err), log.Fields{"group": authv1.SchemeGroupVersion, "scheme": s})
+		return
 	}
-	c, err := client.New(ctrl.GetConfigOrDie(), client.Options{Scheme: s})
+	cfg, err := ctrl.GetConfig()
 	if err != nil {
-		panic(err)
+		log.Event(logs, "an error occurred while loading kubeconfig", log.Error(err))
+		return
+	}
+	c, err := client.New(cfg, client.Options{Scheme: s})
+	if err != nil {
+		log.Event(logs, "an error occurred while creating kubernetes client", log.Error(err))
+		return
 	}
 
 	if !strings.Contains(serviceAddr, "://") {
@@ -85,13 +95,12 @@ func main() {
 		for {
 			select {
 			case <-stopLatch.Chan():
-				goto foo
+				return
 			case evt := <-reconcileEventChannel:
 				res, err := rec.Reconcile(context.Background(), evt)
-				log.Event(logs, "reconcile", log.Fields{"res": res, "err": err})
+				log.Event(logs, "reconcile", log.V(1), log.Fields{"res": res, "err": err})
 			}
 		}
-	foo:
 	}()
 
 	var wg sync.WaitGroup

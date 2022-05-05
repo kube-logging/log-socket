@@ -20,9 +20,11 @@ func Error(err error) log.FieldSet {
 	}
 }
 
+const verbosityFieldKey = "verbosity"
+
 func V(verbosity int) log.FieldSet {
 	return Fields{
-		"verbosity": verbosity,
+		verbosityFieldKey: verbosity,
 	}
 }
 
@@ -81,4 +83,27 @@ func empty(fields log.FieldSet) bool {
 		return true
 	})
 	return !hasElem
+}
+
+func WithVerbosityFilter(logs Sink, verbosity int) Sink {
+	return &VerbosityFilterSink{
+		logs:      logs,
+		verbosity: verbosity,
+	}
+}
+
+type VerbosityFilterSink struct {
+	logs      Sink
+	verbosity int
+}
+
+func (s *VerbosityFilterSink) Record(message string, fields log.FieldSet) {
+	if value, found := log.LookupFieldByName(fields, verbosityFieldKey); found {
+		if verbosity, ok := value.(int); ok {
+			if verbosity > s.verbosity {
+				return
+			}
+		}
+	}
+	s.logs.Record(message, fields)
 }
