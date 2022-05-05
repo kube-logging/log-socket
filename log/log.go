@@ -98,12 +98,13 @@ type VerbosityFilterSink struct {
 }
 
 func (s *VerbosityFilterSink) Record(message string, fields log.FieldSet) {
+	verbosity := 0
 	if value, found := log.LookupFieldByName(fields, verbosityFieldKey); found {
-		if verbosity, ok := value.(int); ok {
-			if verbosity > s.verbosity {
-				return
-			}
+		if v, ok := value.(int); ok {
+			verbosity = v
 		}
 	}
-	s.logs.Record(message, fields)
+	if verbosity <= s.verbosity {
+		s.logs.Record(message, fields)
+	}
 }
