@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/banzaicloud/log-socket/internal/metrics"
 	"github.com/banzaicloud/log-socket/log"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -17,7 +16,7 @@ import (
 const HealthCheckEndpoint = "/healthz"
 const MetricsEndpoint = "/metrics"
 
-func Ingest(addr string, records RecordSink, logs log.Sink, stopSignal Handleable, terminateSignal Handleable) {
+func Ingest(addr string, records RecordSink, logs log.Sink, metrics IngestMetrics, stopSignal Handleable, terminateSignal Handleable) {
 	logs = log.WithFields(logs, log.Fields{"task": "log ingestion"})
 
 	server := &http.Server{
@@ -73,13 +72,12 @@ func Ingest(addr string, records RecordSink, logs log.Sink, stopSignal Handleabl
 					continue
 				}
 
-				metrics.LogReceived()
-				metrics.BytesReceived(len(data))
-
 				rec := Record{
 					RawData: data,
 					Flow:    flow,
 				}
+
+				metrics.LogRecordReceived(rec)
 
 				if err := json.Unmarshal(data, &rec.Data); err != nil {
 					log.Event(logs, "failed to parse log data", log.Error(err), log.Fields{"data": string(data)})
@@ -117,4 +115,9 @@ func Ingest(addr string, records RecordSink, logs log.Sink, stopSignal Handleabl
 		log.Event(logs, "HTTP server ListenAndServe returned an error", log.Error(err))
 	}
 	shutdownWG.Wait()
+}
+
+type IngestMetrics interface {
+	HealthCheck()
+	LogRecordReceived(r Record)
 }
