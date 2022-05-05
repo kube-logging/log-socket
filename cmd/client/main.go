@@ -129,7 +129,7 @@ func main() {
 					log.Event(logs, "failed to read record data", log.Error(err))
 					continue
 				}
-				fmt.Printf("data received: %s\n", data)
+				fmt.Println(string(data))
 				log.Event(logs, "new record", log.Fields{"data": data})
 			}
 		}
