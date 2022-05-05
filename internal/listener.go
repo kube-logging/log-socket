@@ -151,7 +151,7 @@ func (l *listener) Send(r Record) {
 		metrics.Bytes(metrics.MBytesTransferred, len(r.RawData))
 	}
 
-	log.Event(l.logs, "sending log record to listener", log.Fields{"listener": l, "record": r})
+	log.Event(l.logs, "sending log record to listener", log.V(1), log.Fields{"listener": l, "record": r})
 
 	wc, err := l.conn.NextWriter(websocket.BinaryMessage)
 	if err != nil {
