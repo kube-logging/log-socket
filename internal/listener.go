@@ -110,6 +110,8 @@ func (l *listener) Send(r Record) {
 	// TODO: complete auth check here
 	allowListStr, ok := GetIn(r.Data, "kubernetes", "labels", RBACAllowList).(string)
 	if !ok {
+		metrics.Log(metrics.MLogFiltered)
+		metrics.Bytes(metrics.MBytesFiltered, len(r.RawData))
 		log.Event(l.logs, "RBAC list missing from log record")
 		return
 	}
@@ -144,6 +146,7 @@ func (l *listener) Send(r Record) {
 	return
 
 unregister:
+	metrics.Listeners(metrics.MListenerRemoved)
 	go l.reg.Unregister(l)
 }
 

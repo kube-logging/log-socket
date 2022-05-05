@@ -17,6 +17,7 @@ import (
 	// "k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/banzaicloud/log-socket/internal"
+	"github.com/banzaicloud/log-socket/internal/metrics"
 	"github.com/banzaicloud/log-socket/internal/reconciler"
 	"github.com/banzaicloud/log-socket/log"
 	"github.com/banzaicloud/log-socket/pkg/slice"
@@ -133,6 +134,7 @@ func main() {
 					})
 				}
 				listeners = append(listeners, listenersToAdd...)
+				metrics.Listeners(metrics.MListenerCurrent, float64(len(listeners)))
 				if len(listenersToAdd) > 0 || len(listenersToRemove) > 0 {
 					reconcileEventChannel <- generateReconcileEvent(listeners)
 

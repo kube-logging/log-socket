@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -35,7 +34,6 @@ func Ingest(addr string, records RecordSink, logs log.Sink, stopSignal Handleabl
 
 			if r.URL.Path == MetricsEndpoint {
 				log.Event(logs, "metrics", log.V(1))
-				fmt.Println(metrics.DefaultMetrics)
 				promhttp.Handler().ServeHTTP(w, r)
 				return
 			}

@@ -6,24 +6,26 @@ type BytesAction = MetricKey
 type ListenerAction = MetricKey
 
 const (
-	MTotalLog      MetricKey = "total_log"
+	LogPrefix string = "log_socket_"
+
+	MTotalLog      MetricKey = LogPrefix + "total_log"
 	MLogReceived   LogAction = "received"
 	MLogTransfered LogAction = "transferred"
 	MLogFiltered   LogAction = "filtered"
 
-	MTotalBytes       MetricKey   = "total_bytes"
+	MTotalBytes       MetricKey   = LogPrefix + "total_bytes"
 	MBytesReceived    BytesAction = "received"
 	MBytesTransferred BytesAction = "transferred"
 	MBytesFiltered    BytesAction = "filtered"
 
-	MListeners        MetricKey      = "listeners"
-	MListenerCurrent  MetricKey      = "current"
+	MListeners        MetricKey      = LogPrefix + "listeners"
+	MListenerCurrent  ListenerAction = "current"
 	MListenerTotal    ListenerAction = "total"
 	MListenerApproved ListenerAction = "approved"
 	MListenerRejected ListenerAction = "rejected"
 	MListenerRemoved  ListenerAction = "removed"
 
-	MHealthChecks MetricKey = "total_healthchecks"
+	MHealthChecks MetricKey = LogPrefix + "total_healthchecks"
 
 	MError MetricKey = "errors"
 
@@ -38,17 +40,23 @@ func Bytes(action BytesAction, val int) {
 	Record(Key(MTotalBytes, KStatus), Add(float64(val)), action)
 }
 
-func Listeners(action ListenerAction) {
+func Listeners(action ListenerAction, v ...float64) {
 	switch action {
 	case MListenerRejected:
 		Record(Key(MListeners, KStatus), Inc(), MListenerRejected)
 	case MListenerApproved:
 		Record(Key(MListeners, KStatus), Inc(), MListenerApproved)
-		Record(Key(MListeners, KStatus), Inc(), MListenerCurrent)
 	case MListenerRemoved:
-		Record(Key(MListeners, KStatus), Dec(), MListenerCurrent)
+		Record(Key(MListeners, KStatus), Inc(), MListenerRemoved)
 	case MListenerTotal:
 		Record(Key(MListeners, KStatus), Inc(), MListenerTotal)
+	case MListenerCurrent:
+		if len(v) > 0 {
+			Record(Key(MListeners, KStatus), Set(v[0]), MListenerCurrent)
+		} else {
+			Record(Key(MListeners, KStatus), Set(0), MListenerCurrent)
+		}
+
 	}
 }
 
