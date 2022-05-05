@@ -22,11 +22,17 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			log.Event(logs, "new listener connection request", log.V(2), log.Fields{"request": r})
 
-			metrics.Listeners(metrics.MListenerTotal)
+			nn, err := ExtractFlow(r)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+
+			metrics.Listeners(metrics.MListenerTotal, -1)
 
 			authToken := r.Header.Get(AuthHeaderKey)
 			if authToken == "" {
-				metrics.Listeners(metrics.MListenerRejected)
+				metrics.Listeners(metrics.MListenerRejected, -1, string(nn.Kind), nn.Namespace, nn.Name, "N/A")
 				log.Event(logs, "no authentication token in request headers", log.Fields{"headers": r.Header})
 				http.Error(w, "missing authentication token", http.StatusForbidden)
 				return
@@ -34,7 +40,7 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 
 			usrInfo, err := authenticator.Authenticate(authToken)
 			if err != nil {
-				metrics.Listeners(metrics.MListenerRejected)
+				metrics.Listeners(metrics.MListenerRejected, -1, string(nn.Kind), nn.Namespace, nn.Name, "N/A")
 				log.Event(logs, "authentication failed", log.Error(err), log.Fields{"token": authToken})
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -63,11 +69,11 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 				flow:    flow,
 				usrInfo: usrInfo,
 			}
-			metrics.Listeners(metrics.MListenerApproved)
+			metrics.Listeners(metrics.MListenerApproved, -1, string(nn.Kind), nn.Namespace, nn.Name, l.usrInfo.Username)
 			reg.Register(l)
 			go l.readLoop()
 			wsConn.SetCloseHandler(func(code int, text string) error {
-				metrics.Listeners(metrics.MListenerRemoved)
+				metrics.Listeners(metrics.MListenerRemoved, -1, string(nn.Kind), nn.Namespace, nn.Name, l.usrInfo.Username)
 				log.Event(logs, "websocket connection closed", log.V(1), log.Fields{"code": code, "text": text, "listener": l})
 				reg.Unregister(l)
 				return nil
@@ -134,8 +140,8 @@ func (l *listener) Send(r Record) {
 
 	allowListStr, ok := GetIn(r.Data, "kubernetes", "labels", RBACAllowList).(string)
 	if !ok {
-		metrics.Log(metrics.MLogFiltered)
-		metrics.Bytes(metrics.MBytesFiltered, len(r.RawData))
+		metrics.Log(metrics.MLogFiltered, string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
+		metrics.Bytes(metrics.MBytesFiltered, len(r.RawData), string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
 		log.Event(l.logs, "RBAC list missing from log record", log.V(1), log.Fields{"record": r})
 		return
 	}
@@ -143,14 +149,13 @@ func (l *listener) Send(r Record) {
 
 	data := r.RawData
 	if !hasItem(allowList, strings.ReplaceAll(l.usrInfo.Username, ":", "_")) {
-		metrics.Log(metrics.MLogFiltered)
-		metrics.Bytes(metrics.MBytesFiltered, len(r.RawData))
+		metrics.Log(metrics.MLogFiltered, string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
+		metrics.Bytes(metrics.MBytesFiltered, len(r.RawData), string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
 		log.Event(l.logs, "listener does not have permission to view log record", log.V(1), log.Fields{"listener": l, "record": r, "allowList": allowList})
-
 		data = []byte(fmt.Sprintf(`{"error": "Permission denied to access %s logs for %s"}`, GetIn(r.Data, "kubernetes", "pod_name").(string), l.usrInfo.Username))
 	} else {
-		metrics.Log(metrics.MLogTransfered)
-		metrics.Bytes(metrics.MBytesTransferred, len(r.RawData))
+		metrics.Log(metrics.MLogTransfered, string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
+		metrics.Bytes(metrics.MBytesTransferred, len(r.RawData), string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
 	}
 
 	log.Event(l.logs, "sending log record to listener", log.V(1), log.Fields{"listener": l, "record": r})
@@ -174,7 +179,7 @@ func (l *listener) Send(r Record) {
 	return
 
 unregister:
-	metrics.Listeners(metrics.MListenerRemoved)
+	metrics.Listeners(metrics.MListenerRemoved, -1, string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
 	go l.reg.Unregister(l)
 }
 
