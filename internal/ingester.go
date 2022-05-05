@@ -39,8 +39,9 @@ func Ingest(addr string, records RecordSink, logs log.Sink, stopSignal Handleabl
 			}
 
 			elts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-			if len(elts) < 1 {
-				http.Error(w, "invalid URL path", http.StatusNotFound)
+			if len(elts) != 3 {
+				log.Event(logs, "URL path is not a valid flow reference", log.Fields{"url": r.URL})
+				http.Error(w, "invalid URL path", http.StatusBadRequest)
 				return
 			}
 
