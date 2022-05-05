@@ -15,7 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/banzaicloud/log-socket/internal"
-	"github.com/banzaicloud/log-socket/internal/metrics"
 	"github.com/banzaicloud/log-socket/internal/reconciler"
 	"github.com/banzaicloud/log-socket/log"
 	"github.com/banzaicloud/log-socket/pkg/slice"
@@ -36,6 +35,8 @@ func main() {
 	pflag.Parse()
 
 	var logs log.Sink = log.WithVerbosityFilter(log.NewWriterSink(os.Stdout), verbosity)
+
+	metrics := internal.NewMetrics(logs)
 
 	records := make(internal.RecordsChannel)
 	listenerReg := make(internal.ListenerEventChannel)
@@ -107,14 +108,14 @@ func main() {
 		defer wg.Done()
 		defer stopLatch.Close()
 
-		internal.Ingest(ingestAddr, records, logs, stopSignal, nil)
+		internal.Ingest(ingestAddr, records, logs, metrics, stopSignal, nil)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer stopLatch.Close()
 
-		internal.Listen(listenAddr, tlsConfig, listenerReg, logs, stopSignal, nil, authenticator)
+		internal.Listen(listenAddr, tlsConfig, listenerReg, logs, metrics, stopSignal, nil, authenticator)
 	}()
 	wg.Add(1)
 	go func() {
@@ -134,6 +135,7 @@ func main() {
 					slice.RemoveFunc(&listeners, func(item internal.Listener) bool {
 						for _, l := range listenersToRemove {
 							if l == item {
+								metrics.ListenerRemoved(l)
 								return true
 							}
 						}
@@ -141,7 +143,7 @@ func main() {
 					})
 				}
 				listeners = append(listeners, listenersToAdd...)
-				metrics.Listeners(metrics.MListenerCurrent, len(listeners))
+				metrics.CurrentListeners(len(listeners))
 				if len(listenersToAdd) > 0 || len(listenersToRemove) > 0 {
 					reconcileEventChannel <- generateReconcileEvent(listeners)
 

@@ -11,11 +11,10 @@ import (
 	"go.uber.org/multierr"
 	authv1 "k8s.io/api/authentication/v1"
 
-	"github.com/banzaicloud/log-socket/internal/metrics"
 	"github.com/banzaicloud/log-socket/log"
 )
 
-func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.Sink,
+func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.Sink, metrics ListenMetrics,
 	stopSignal Handleable, terminationSignal Handleable, authenticator Authenticator) {
 	upgrader := websocket.Upgrader{}
 	server := &http.Server{
@@ -26,24 +25,23 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 			flow, err := ExtractFlow(r)
 			if err != nil {
 				log.Event(logs, "failed to extract flow from request", log.Error(err), log.Fields{"request": r})
+				metrics.ListenerRejected(flow, authv1.UserInfo{})
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 
-			metrics.Listeners(metrics.MListenerTotal, -1)
-
 			authToken := r.Header.Get(AuthHeaderKey)
 			if authToken == "" {
-				metrics.Listeners(metrics.MListenerRejected, -1, string(flow.Kind), flow.Namespace, flow.Name, "N/A")
 				log.Event(logs, "no authentication token in request headers", log.Fields{"headers": r.Header})
+				metrics.ListenerRejected(flow, authv1.UserInfo{})
 				http.Error(w, "missing authentication token", http.StatusForbidden)
 				return
 			}
 
 			usrInfo, err := authenticator.Authenticate(authToken)
 			if err != nil {
-				metrics.Listeners(metrics.MListenerRejected, -1, string(flow.Kind), flow.Namespace, flow.Name, "N/A")
 				log.Event(logs, "authentication failed", log.Error(err), log.Fields{"token": authToken})
+				metrics.ListenerRejected(flow, usrInfo)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -51,24 +49,26 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 			wsConn, err := upgrader.Upgrade(w, r, nil)
 			if err != nil {
 				log.Event(logs, "failed to upgrade connection", log.Error(err))
+				metrics.ListenerRejected(flow, usrInfo)
 				// cannot reply with an error here since the connection has been "hijacked"
 				return
 			}
 
 			log.Event(logs, "successful websocket upgrade", log.V(2), log.Fields{"request": r, "wsConn": wsConn})
 
+			metrics.ListenerAccepted(flow, usrInfo)
+
 			l := &listener{
 				conn:    wsConn,
-				reg:     reg,
-				logs:    logs,
 				flow:    flow,
+				logs:    logs,
+				metrics: metrics,
+				reg:     reg,
 				usrInfo: usrInfo,
 			}
-			metrics.Listeners(metrics.MListenerApproved, -1, string(flow.Kind), flow.Namespace, flow.Name, l.usrInfo.Username)
 			reg.Register(l)
 			go l.readLoop()
 			wsConn.SetCloseHandler(func(code int, text string) error {
-				metrics.Listeners(metrics.MListenerRemoved, -1, string(flow.Kind), flow.Namespace, flow.Name, l.usrInfo.Username)
 				log.Event(logs, "websocket connection closed", log.V(1), log.Fields{"code": code, "text": text, "listener": l})
 				reg.Unregister(l)
 				return nil
@@ -84,6 +84,12 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 	}
 }
 
+type ListenMetrics interface {
+	ListenerAccepted(flow FlowReference, user authv1.UserInfo)
+	ListenerRejected(flow FlowReference, user authv1.UserInfo)
+	listenerMetrics
+}
+
 type ListenerRegistry interface {
 	Register(Listener)
 	Unregister(Listener)
@@ -92,14 +98,21 @@ type ListenerRegistry interface {
 type Listener interface {
 	Send(Record)
 	Flow() FlowReference
+	User() authv1.UserInfo
 }
 
 type listener struct {
 	conn    *websocket.Conn
 	flow    FlowReference
 	logs    log.Sink
+	metrics listenerMetrics
 	reg     ListenerRegistry
 	usrInfo authv1.UserInfo
+}
+
+type listenerMetrics interface {
+	LogRecordRedacted(l Listener, r Record)
+	LogRecordTransmitted(l Listener, r Record)
 }
 
 func (l listener) Equals(o listener) bool {
@@ -140,13 +153,12 @@ func (l *listener) Send(r Record) {
 
 	data := r.RawData
 	if !rules.canView(l.usrInfo) {
-		metrics.Log(metrics.MLogFiltered, string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
-		metrics.Bytes(metrics.MBytesFiltered, len(r.RawData), string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
 		log.Event(l.logs, "listener does not have permission to view log record", log.V(1), log.Fields{"listener": l, "record": r, "rules": rules})
+		l.metrics.LogRecordRedacted(l, r)
+
 		data = []byte(fmt.Sprintf(`{"error": "Permission denied to access %s logs for %s"}`, r.Data.Kubernetes.PodName, l.usrInfo.Username))
 	} else {
-		metrics.Log(metrics.MLogTransfered, string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
-		metrics.Bytes(metrics.MBytesTransferred, len(r.RawData), string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
+		l.metrics.LogRecordTransmitted(l, r)
 	}
 
 	log.Event(l.logs, "sending log record to listener", log.V(1), log.Fields{"listener": l, "record": r})
@@ -170,8 +182,11 @@ func (l *listener) Send(r Record) {
 	return
 
 unregister:
-	metrics.Listeners(metrics.MListenerRemoved, -1, string(l.flow.Kind), l.flow.Namespace, l.flow.Name, l.usrInfo.Username)
 	go l.reg.Unregister(l)
+}
+
+func (l *listener) User() authv1.UserInfo {
+	return l.usrInfo
 }
 
 // readLoop reads the websocket connection so we handle close messages
