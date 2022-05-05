@@ -24,38 +24,15 @@ var (
 	FlowAnnotationKey = "flowRef"
 )
 
-type Strimap = map[string]interface{}
-
-func GetIn(m interface{}, args ...interface{}) interface{} {
-	var subSet = m
-	for _, arg := range args {
-		switch t := subSet.(type) {
-		case []interface{}:
-			elt, ok := arg.(int)
-			if !ok {
-				return nil
-			}
-			if elt < 0 || elt >= len(t) {
-				return nil
-			}
-			subSet = t[elt]
-		case map[string]interface{}:
-			key, ok := arg.(string)
-			if !ok {
-				return nil
-			}
-			subSet = t[key]
-		default:
-			return nil
-		}
-	}
-	return subSet
-}
-
 type Record struct {
 	RawData []byte
-	Data    Strimap
-	Flow    FlowReference
+	Data    struct {
+		Kubernetes struct {
+			Labels  map[string]string `json:"labels"`
+			PodName string            `json:"pod_name"`
+		} `json:"kubernetes"`
+	}
+	Flow FlowReference
 }
 
 type RecordSink interface {
