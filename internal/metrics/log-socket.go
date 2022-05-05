@@ -33,28 +33,28 @@ const (
 )
 
 func Log(action LogAction) {
-	Record(Key(MTotalLog, KStatus), Inc(), action)
+	Record(Key(MTotalLog, MStatus), Inc(), action)
 }
 
 func Bytes(action BytesAction, val int) {
-	Record(Key(MTotalBytes, KStatus), Add(float64(val)), action)
+	Record(Key(MTotalBytes, MStatus), Add(float64(val)), action)
 }
 
 func Listeners(action ListenerAction, v ...float64) {
 	switch action {
 	case MListenerRejected:
-		Record(Key(MListeners, KStatus), Inc(), MListenerRejected)
+		Record(Key(MListeners, MStatus), Inc(), MListenerRejected)
 	case MListenerApproved:
-		Record(Key(MListeners, KStatus), Inc(), MListenerApproved)
+		Record(Key(MListeners, MStatus), Inc(), MListenerApproved)
 	case MListenerRemoved:
-		Record(Key(MListeners, KStatus), Inc(), MListenerRemoved)
+		Record(Key(MListeners, MStatus), Inc(), MListenerRemoved)
 	case MListenerTotal:
-		Record(Key(MListeners, KStatus), Inc(), MListenerTotal)
+		Record(Key(MListeners, MStatus), Inc(), MListenerTotal)
 	case MListenerCurrent:
 		if len(v) > 0 {
-			Record(Key(MListeners, KStatus), Set(v[0]), MListenerCurrent)
+			Record(Key(MListeners, MStatus), Set(v[0]), MListenerCurrent)
 		} else {
-			Record(Key(MListeners, KStatus), Set(0), MListenerCurrent)
+			Record(Key(MListeners, MStatus), Set(0), MListenerCurrent)
 		}
 
 	}
