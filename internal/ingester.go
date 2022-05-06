@@ -32,14 +32,14 @@ func Ingest(addr string, records RecordSink, logs log.Sink, metrics IngestMetric
 			}
 
 			if r.URL.Path == MetricsEndpoint {
-				log.Event(logs, "metrics", log.V(1))
+				log.Event(logs, "metrics query", log.V(1))
 				promhttp.Handler().ServeHTTP(w, r)
 				return
 			}
 
 			elts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 			if len(elts) != 3 {
-				log.Event(logs, "URL path is not a valid flow reference", log.Fields{"url": r.URL})
+				log.Event(logs, "URL path is not a valid flow reference", log.V(1), log.Fields{"url": r.URL})
 				http.Error(w, "invalid URL path", http.StatusBadRequest)
 				return
 			}
@@ -55,12 +55,12 @@ func Ingest(addr string, records RecordSink, logs log.Sink, metrics IngestMetric
 
 			data, err := io.ReadAll(r.Body)
 			if err != nil {
-				log.Event(logs, "failed to read request body", log.Error(err))
+				log.Event(logs, "failed to read request body", log.V(1), log.Error(err))
 				http.Error(w, "failed to read request body", http.StatusInternalServerError)
 				return
 			}
 			if err := r.Body.Close(); err != nil {
-				log.Event(logs, "failed to close request body", log.Error(err))
+				log.Event(logs, "failed to close request body", log.V(1), log.Error(err))
 				http.Error(w, "failed to close request body", http.StatusInternalServerError)
 				return
 			}
@@ -80,12 +80,12 @@ func Ingest(addr string, records RecordSink, logs log.Sink, metrics IngestMetric
 				metrics.LogRecordReceived(rec)
 
 				if err := json.Unmarshal(data, &rec.Data); err != nil {
-					log.Event(logs, "failed to parse log data", log.Error(err), log.Fields{"data": string(data)})
+					log.Event(logs, "failed to parse log data", log.V(1), log.Error(err), log.Fields{"data": string(data)})
 					http.Error(w, "failed to parse log data", http.StatusBadRequest)
 					return
 				}
 
-				log.Event(logs, "got log record via HTTP", log.V(1), log.Fields{"record": rec})
+				log.Event(logs, "ingested log record via HTTP", log.V(1), log.Fields{"record": rec})
 				records.Push(rec)
 			}
 			w.WriteHeader(http.StatusOK)

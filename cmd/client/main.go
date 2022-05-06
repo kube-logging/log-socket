@@ -112,12 +112,13 @@ func main() {
 		return
 	}
 
-	log.Event(logs, "successfully connected to service", log.Fields{"addr": wsConn.UnderlyingConn().RemoteAddr()})
+	log.Event(logs, "successfully connected to service", log.V(1), log.Fields{"addr": wsConn.UnderlyingConn().RemoteAddr()})
 
 	signals := make(chan os.Signal)
 	signal.Notify(signals, os.Interrupt)
 
 	go func() {
+		// TODO: defer exit
 		for {
 			msgTyp, reader, err := wsConn.NextReader()
 			if err != nil {
@@ -128,11 +129,11 @@ func main() {
 			case websocket.BinaryMessage:
 				data, err := io.ReadAll(reader)
 				if err != nil {
-					log.Event(logs, "failed to read record data", log.Error(err))
+					log.Event(logs, "failed to read record data", log.V(1), log.Error(err))
 					continue
 				}
+				log.Event(logs, "new record", log.V(2), log.Fields{"data": data})
 				fmt.Println(string(data))
-				log.Event(logs, "new record", log.Fields{"data": data})
 			}
 		}
 	}()

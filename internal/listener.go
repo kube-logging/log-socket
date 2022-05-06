@@ -24,7 +24,7 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 
 			flow, err := ExtractFlow(r)
 			if err != nil {
-				log.Event(logs, "failed to extract flow from request", log.Error(err), log.Fields{"request": r})
+				log.Event(logs, "failed to extract flow from request", log.V(1), log.Error(err), log.Fields{"request": r})
 				metrics.ListenerRejected(flow, authv1.UserInfo{})
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
@@ -32,7 +32,7 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 
 			authToken := r.Header.Get(AuthHeaderKey)
 			if authToken == "" {
-				log.Event(logs, "no authentication token in request headers", log.Fields{"headers": r.Header})
+				log.Event(logs, "no authentication token in request headers", log.V(1), log.Fields{"headers": r.Header})
 				metrics.ListenerRejected(flow, authv1.UserInfo{})
 				http.Error(w, "missing authentication token", http.StatusForbidden)
 				return
@@ -40,7 +40,7 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 
 			usrInfo, err := authenticator.Authenticate(authToken)
 			if err != nil {
-				log.Event(logs, "authentication failed", log.Error(err), log.Fields{"token": authToken})
+				log.Event(logs, "authentication failed", log.V(1), log.Error(err), log.Fields{"token": authToken})
 				metrics.ListenerRejected(flow, usrInfo)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -48,7 +48,7 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 
 			wsConn, err := upgrader.Upgrade(w, r, nil)
 			if err != nil {
-				log.Event(logs, "failed to upgrade connection", log.Error(err))
+				log.Event(logs, "failed to upgrade connection", log.V(1), log.Error(err))
 				metrics.ListenerRejected(flow, usrInfo)
 				// cannot reply with an error here since the connection has been "hijacked"
 				return
@@ -165,17 +165,17 @@ func (l *listener) Send(r Record) {
 
 	wc, err := l.conn.NextWriter(websocket.BinaryMessage)
 	if err != nil {
-		log.Event(l.logs, "an error occurred while getting next writer for websocket connection", log.Error(err))
+		log.Event(l.logs, "an error occurred while getting next writer for websocket connection", log.V(1), log.Error(err))
 		goto unregister
 	}
 
 	if _, err := wc.Write(data); err != nil {
-		log.Event(l.logs, "an error occurred while writing record data to websocket connection", log.Error(err))
+		log.Event(l.logs, "an error occurred while writing record data to websocket connection", log.V(1), log.Error(err))
 		goto unregister
 	}
 
 	if err := wc.Close(); err != nil {
-		log.Event(l.logs, "an error occurred while flushing frame to websocket connection", log.Error(err))
+		log.Event(l.logs, "an error occurred while flushing frame to websocket connection", log.V(1), log.Error(err))
 		goto unregister
 	}
 
@@ -193,9 +193,9 @@ func (l *listener) User() authv1.UserInfo {
 func (l *listener) readLoop() {
 	for {
 		typ, dat, err := l.conn.ReadMessage()
-		log.Event(l.logs, "read message from listener", log.V(1), log.Fields{"type": typ, "data": dat, "error": err})
+		log.Event(l.logs, "read message from listener", log.V(2), log.Fields{"type": typ, "data": dat, "error": err})
 		if err != nil {
-			log.Event(l.logs, "an error occurred while reading websocket connection", log.Error(err))
+			log.Event(l.logs, "an error occurred while reading websocket connection", log.V(1), log.Error(err))
 			return
 		}
 		if typ == websocket.CloseMessage {

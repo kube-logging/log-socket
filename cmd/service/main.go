@@ -87,17 +87,18 @@ func main() {
 		serviceAddr = "http://" + serviceAddr
 	}
 
-	rec := reconciler.New(serviceAddr, c)
 	authenticator := internal.TokenReviewAuthenticator{Client: c}
 
 	go func() {
+		rec := reconciler.New(serviceAddr, c)
 		for {
 			select {
 			case <-stopLatch.Chan():
 				return
 			case evt := <-reconcileEventChannel:
 				res, err := rec.Reconcile(context.Background(), evt)
-				log.Event(logs, "reconcile", log.V(1), log.Fields{"res": res, "err": err})
+				log.Event(logs, "reconcile finished", log.V(1), log.Fields{"res": res, "err": err})
+				// TODO: requeue
 			}
 		}
 	}()
@@ -154,10 +155,10 @@ func main() {
 					break loop
 				}
 
-				log.Event(logs, "forwarding record", log.V(1), log.Fields{"record": r})
+				log.Event(logs, "forwarding record", log.V(2), log.Fields{"record": r})
 
 				if len(listeners) == 0 {
-					log.Event(logs, "no listeners, discarding record", log.V(1), log.Fields{"record": r})
+					log.Event(logs, "no listeners, discarding record", log.V(2), log.Fields{"record": r})
 					continue loop
 				}
 
