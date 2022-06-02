@@ -9,6 +9,7 @@ require (
 	github.com/prometheus/client_golang v1.12.1
 	github.com/siliconbrain/gologlite v1.0.0
 	github.com/spf13/pflag v1.0.5
+	go.uber.org/multierr v1.6.0
 	k8s.io/api v0.23.5
 	k8s.io/apimachinery v0.23.6
 	k8s.io/client-go v0.23.5
@@ -50,7 +51,6 @@ require (
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/wayneashleyberry/terminal-dimensions v1.0.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
-	go.uber.org/multierr v1.6.0 // indirect
 	golang.org/x/net v0.0.0-20220114011407-0dd24b26b47d // indirect
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8 // indirect
 	golang.org/x/sys v0.0.0-20220114195835-da31bd327af9 // indirect
