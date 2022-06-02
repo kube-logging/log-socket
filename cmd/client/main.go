@@ -25,36 +25,42 @@ import (
 
 func main() {
 	var authToken string
+	var clusterFlow bool
 	var listenAddr string
 	var svcName string
 	var svcNamespace string
 	var svcPort string
 	var verbosity int
-	pflag.StringVar(&authToken, "token", "", "token used for authentication")
+	pflag.StringVarP(&authToken, "token", "t", "", "token used for authentication")
+	pflag.BoolVarP(&clusterFlow, "clusterflow", "c", false, "stream logs from a cluster flow instead of a regular flow")
 	pflag.StringVar(&listenAddr, "listen-addr", "", "address where the service accepts WebSocket listeners")
-	pflag.StringVarP(&svcName, "service", "s", "log-socket", "name of the service that accepts WebSocket listeners")
 	pflag.StringVarP(&svcNamespace, "namespace", "n", "default", "log socket service namespace")
 	pflag.StringVarP(&svcPort, "port", "p", "10001", "log socket service listening port")
+	pflag.StringVarP(&svcName, "service", "s", "log-socket", "name of the service that accepts WebSocket listeners")
 	pflag.IntVarP(&verbosity, "verbosity", "v", verbosity, "log verbosity level")
 	pflag.Parse()
 
 	var logs log.Sink = log.WithVerbosityFilter(log.NewWriterSink(os.Stderr), verbosity)
 
-	flowKind := pflag.Arg(0)
-	switch flowKind {
-	case "flow", "clusterflow":
-	default:
-		log.Event(logs, "invalid flow kind", log.Fields{"kind": flowKind})
-		return
+	if pflag.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "no flow reference specified")
+		pflag.Usage()
+		os.Exit(1)
 	}
 
-	flowRef := pflag.Arg(1)
+	flowRef := pflag.Arg(0)
 	elts := strings.SplitN(flowRef, "/", 2)
 	if len(elts) != 2 {
-		log.Event(logs, "invalid flow reference", log.Fields{"ref": flowRef})
-		return
+		fmt.Fprintf(os.Stderr, "invalid flow reference %q\n", flowRef)
+		pflag.Usage()
+		os.Exit(1)
 	}
 	flowNamespace, flowName := elts[0], elts[1]
+
+	flowKind := "flow"
+	if clusterFlow {
+		flowKind = "clusterflow"
+	}
 
 	dialer := *websocket.DefaultDialer
 
@@ -65,12 +71,12 @@ func main() {
 		cfg, err := ctrl.GetConfig()
 		if err != nil {
 			log.Event(logs, "failed to get kubeconfig", log.Error(err))
-			return
+			os.Exit(2)
 		}
 		tlsCfg, err := rest.TLSConfigFor(cfg)
 		if err != nil {
 			log.Event(logs, "failed to get TLS config for kubeconfig")
-			return
+			os.Exit(2)
 		}
 
 		dialer.TLSClientConfig = tlsCfg
@@ -84,7 +90,7 @@ func main() {
 				"port":       svcPort,
 				"path":       path,
 			})
-			return
+			os.Exit(2)
 		}
 	} else {
 		var err error
@@ -94,7 +100,7 @@ func main() {
 		listenURL, err = url.Parse(listenAddr)
 		if err != nil {
 			log.Event(logs, "failed to parse listen address", log.Error(err))
-			return
+			os.Exit(2)
 		}
 		listenURL.Path = pathpkg.Join(listenURL.Path, path)
 	}
@@ -109,7 +115,7 @@ func main() {
 	wsConn, _, err := dialer.DialContext(context.Background(), listenURL.String(), http.Header{internal.AuthHeaderKey: []string{authToken}})
 	if err != nil {
 		log.Event(logs, "failed to open websocket connection", log.Error(err), log.Fields{"url": listenURL})
-		return
+		os.Exit(2)
 	}
 
 	log.Event(logs, "successfully connected to service", log.V(1), log.Fields{"addr": wsConn.UnderlyingConn().RemoteAddr()})
@@ -143,7 +149,7 @@ func main() {
 	deadline := time.Now().Add(5 * time.Second)
 	if err := wsConn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseGoingAway, signal.String()), deadline); err != nil {
 		log.Event(logs, "an error occurred while writing close message to websocket", log.Error(err))
-		return
+		os.Exit(2)
 	}
 }
 
