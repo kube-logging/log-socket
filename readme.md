@@ -16,11 +16,8 @@ The tool consists of *a command line tool* that you run on your local machine an
 ### Deploying the service
 The log-socket service has to be deployed in every cluster you want to be able to connect to and inspect flow output in.
 The suggested way for deploying the service is by using the [official Helm chart](charts/log-socket).
-The chart is not published yet, so for the moment you'll have to check out the repository and install from there
 ```sh
-git clone https://github.com/banzaicloud/log-socket.git
-cd log-socket
-helm install log-socket ./charts/log-socket
+helm install --repo https://kubernetes-charts.banzaicloud.com/ log-socket log-socket
 ```
 
 ### Installing the command line tool
