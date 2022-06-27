@@ -46,7 +46,7 @@ service:
   type: ClusterIP
   ingestPort: 10000
   apiPort: 10001
-  
+
 ingress:
   enabled: false
   annotations: {}
