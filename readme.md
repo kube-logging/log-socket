@@ -5,7 +5,7 @@ The tool consists of *a command line tool* that you run on your local machine an
 
 📽 You can see log-socket in action here: https://youtu.be/TWf1ho0XMyM 🍿
 
-[![Show me your logs](https://img.youtube.com/vi/TWf1ho0XMyM/0.jpg)](https://img.youtube.com/vi/TWf1ho0XMyM/0.jpg)
+[![Show me your logs](https://img.youtube.com/vi/TWf1ho0XMyM/0.jpg)](https://youtu.be/TWf1ho0XMyM)
 
 **Table of Contents**
 1. [Deployment and usage](#deployment-and-usage)
