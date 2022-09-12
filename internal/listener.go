@@ -79,8 +79,14 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 		TLSConfig: tlsConfig,
 	}
 
-	if err := server.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-		log.Event(logs, "websocket listener server returned an error", log.Error(err))
+	if tlsConfig == nil {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Event(logs, "websocket listener server returned an error", log.Error(err))
+		}
+	} else {
+		if err := server.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+			log.Event(logs, "websocket listener server returned an error", log.Error(err))
+		}
 	}
 }
 

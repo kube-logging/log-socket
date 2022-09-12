@@ -27,10 +27,12 @@ func main() {
 	var ingestAddr string
 	var listenAddr string
 	var serviceAddr string
+	var noTLS bool
 	var verbosity int
 	pflag.StringVar(&ingestAddr, "ingest-addr", ":10000", "local address where the service ingests logs")
 	pflag.StringVar(&serviceAddr, "service-addr", "log-socket.default.svc:10000", "remote address where the service ingests logs")
 	pflag.StringVar(&listenAddr, "listen-addr", ":10001", "address where the service accepts WebSocket listeners")
+	pflag.BoolVar(&noTLS, "no-tls", false, "listen for WebSocket connections without TLS")
 	pflag.IntVarP(&verbosity, "verbosity", "v", verbosity, "log verbosity level")
 	pflag.Parse()
 
@@ -42,22 +44,26 @@ func main() {
 	listenerReg := make(internal.ListenerEventChannel)
 	reconcileEventChannel := make(internal.ReconcileEventChannel)
 
-	caCert, caKey, err := tlstools.GenerateSelfSignedCA()
-	if err != nil {
-		log.Event(logs, "failed to generate self-signed CA", log.Error(err))
-		return
-	}
+	var tlsConfig *tls.Config
 
-	tlsCert, err := tlstools.GenerateTLSCert(caCert, caKey, big.NewInt(1), []string{"localhost"}, []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::")})
-	if err != nil {
-		log.Event(logs, "failed to generate TLS certificate with self-signed CA", log.Error(err))
-		return
-	}
+	if !noTLS {
+		caCert, caKey, err := tlstools.GenerateSelfSignedCA()
+		if err != nil {
+			log.Event(logs, "failed to generate self-signed CA", log.Error(err))
+			return
+		}
 
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{
-			tlsCert,
-		},
+		tlsCert, err := tlstools.GenerateTLSCert(caCert, caKey, big.NewInt(1), []string{"localhost"}, []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::")})
+		if err != nil {
+			log.Event(logs, "failed to generate TLS certificate with self-signed CA", log.Error(err))
+			return
+		}
+
+		tlsConfig = &tls.Config{
+			Certificates: []tls.Certificate{
+				tlsCert,
+			},
+		}
 	}
 
 	stopLatch := internal.NewWaitableLatch()
