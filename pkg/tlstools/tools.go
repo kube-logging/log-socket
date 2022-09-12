@@ -25,13 +25,13 @@ func GenerateSelfSignedCA() (*x509.Certificate, crypto.PrivateKey, error) {
 		NotAfter:              time.Now().Add(12 * time.Hour),
 		NotBefore:             time.Now(),
 		PublicKeyAlgorithm:    x509.ECDSA,
-		PublicKey:             prvKey.PublicKey,
+		PublicKey:             &prvKey.PublicKey,
 		SerialNumber:          big.NewInt(0),
 		Subject: pkix.Name{
 			CommonName: "Test CA",
 		},
 	}
-	certBytes, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, prvKey.PublicKey, prvKey)
+	certBytes, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &prvKey.PublicKey, prvKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -55,10 +55,10 @@ func GenerateTLSCert(caCert *x509.Certificate, caKey crypto.PrivateKey, serial *
 		NotBefore:          time.Now(),
 		NotAfter:           time.Now().Add(12 * time.Hour),
 		PublicKeyAlgorithm: x509.ECDSA,
-		PublicKey:          prvKey.PublicKey,
+		PublicKey:          &prvKey.PublicKey,
 		SerialNumber:       serial,
 	}
-	certBytes, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, prvKey.PublicKey, caKey)
+	certBytes, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, &prvKey.PublicKey, caKey)
 	if err != nil {
 		return
 	}
