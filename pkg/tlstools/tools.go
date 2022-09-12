@@ -2,7 +2,8 @@ package tlstools
 
 import (
 	"crypto"
-	"crypto/ed25519"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
@@ -13,7 +14,7 @@ import (
 )
 
 func GenerateSelfSignedCA() (*x509.Certificate, crypto.PrivateKey, error) {
-	pubKey, prvKey, err := ed25519.GenerateKey(rand.Reader)
+	prvKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -23,14 +24,14 @@ func GenerateSelfSignedCA() (*x509.Certificate, crypto.PrivateKey, error) {
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		NotAfter:              time.Now().Add(12 * time.Hour),
 		NotBefore:             time.Now(),
-		PublicKeyAlgorithm:    x509.Ed25519,
-		PublicKey:             pubKey,
+		PublicKeyAlgorithm:    x509.ECDSA,
+		PublicKey:             prvKey.PublicKey,
 		SerialNumber:          big.NewInt(0),
 		Subject: pkix.Name{
 			CommonName: "Test CA",
 		},
 	}
-	certBytes, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, pubKey, prvKey)
+	certBytes, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, prvKey.PublicKey, prvKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -42,7 +43,7 @@ func GenerateSelfSignedCA() (*x509.Certificate, crypto.PrivateKey, error) {
 }
 
 func GenerateTLSCert(caCert *x509.Certificate, caKey crypto.PrivateKey, serial *big.Int, dnsNames []string, ipAddrs []net.IP) (cert tls.Certificate, err error) {
-	pubKey, prvKey, err := ed25519.GenerateKey(rand.Reader)
+	prvKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return
 	}
@@ -53,11 +54,11 @@ func GenerateTLSCert(caCert *x509.Certificate, caKey crypto.PrivateKey, serial *
 		KeyUsage:           x509.KeyUsageDigitalSignature,
 		NotBefore:          time.Now(),
 		NotAfter:           time.Now().Add(12 * time.Hour),
-		PublicKeyAlgorithm: x509.Ed25519,
-		PublicKey:          pubKey,
+		PublicKeyAlgorithm: x509.ECDSA,
+		PublicKey:          prvKey.PublicKey,
 		SerialNumber:       serial,
 	}
-	certBytes, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, pubKey, caKey)
+	certBytes, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, prvKey.PublicKey, caKey)
 	if err != nil {
 		return
 	}
