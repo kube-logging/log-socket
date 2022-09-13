@@ -16,7 +16,9 @@ import (
 
 func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.Sink, metrics ListenMetrics,
 	stopSignal Handleable, terminationSignal Handleable, authenticator Authenticator) {
-	upgrader := websocket.Upgrader{}
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true }, // allow connections from any origin
+	}
 	server := &http.Server{
 		Addr: addr,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
