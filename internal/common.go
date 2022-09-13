@@ -16,6 +16,7 @@ const (
 	UnregisterListener
 
 	AuthHeaderKey = "X-Authorization"
+	AuthQueryKey  = "token"
 )
 
 var (

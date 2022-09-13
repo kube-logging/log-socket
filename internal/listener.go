@@ -32,7 +32,11 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 
 			authToken := r.Header.Get(AuthHeaderKey)
 			if authToken == "" {
-				log.Event(logs, "no authentication token in request headers", log.V(1), log.Fields{"headers": r.Header})
+				// browsers don't support specifying headers for WebSocket connections so we fall back to getting the auth token from the URL query string
+				authToken = r.URL.Query().Get(AuthQueryKey)
+			}
+			if authToken == "" {
+				log.Event(logs, "no authentication token in request", log.V(1), log.Fields{"headers": r.Header, "query": r.URL.RawQuery})
 				metrics.ListenerRejected(flow, authv1.UserInfo{})
 				http.Error(w, "missing authentication token", http.StatusForbidden)
 				return
