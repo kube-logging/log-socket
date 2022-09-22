@@ -286,16 +286,3 @@ type invalidRBACRule struct {
 func (e invalidRBACRule) Error() string {
 	return fmt.Sprintf(`invalid RBAC rule "%s: %s"`, e.key, e.value)
 }
-
-func firstIndexOf[T comparable](slice []T, item T) int {
-	for idx, itm := range slice {
-		if itm == item {
-			return idx
-		}
-	}
-	return -1
-}
-
-func hasItem[T comparable](slice []T, item T) bool {
-	return firstIndexOf(slice, item) != -1
-}
