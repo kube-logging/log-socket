@@ -48,7 +48,11 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 			if err != nil {
 				log.Event(logs, "authentication failed", log.V(1), log.Error(err), log.Fields{"token": authToken})
 				metrics.ListenerRejected(flow, usrInfo)
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				statusCode := http.StatusInternalServerError
+				if IsUnauthenticatedError(err) {
+					statusCode = http.StatusForbidden
+				}
+				http.Error(w, err.Error(), statusCode)
 				return
 			}
 
@@ -94,6 +98,15 @@ func Listen(addr string, tlsConfig *tls.Config, reg ListenerRegistry, logs log.S
 			log.Event(logs, "websocket listener server returned an error", log.Error(err))
 		}
 	}
+}
+
+type UnauthenticatedError interface {
+	IsUnauthenticatedError() bool
+}
+
+func IsUnauthenticatedError(err error) bool {
+	var e UnauthenticatedError
+	return errors.As(err, &e) && e.IsUnauthenticatedError()
 }
 
 type ListenMetrics interface {
