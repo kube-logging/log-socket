@@ -105,12 +105,16 @@ func main() {
 		listenURL.Path = pathpkg.Join(listenURL.Path, path)
 	}
 
-	listenURL.Scheme = "wss"
-
-	if dialer.TLSClientConfig == nil {
-		dialer.TLSClientConfig = &tls.Config{}
+	if listenURL.Scheme == "" {
+		listenURL.Scheme = "wss"
 	}
-	dialer.TLSClientConfig.InsecureSkipVerify = true
+
+	if listenURL.Scheme == "wss" {
+		if dialer.TLSClientConfig == nil {
+			dialer.TLSClientConfig = &tls.Config{}
+		}
+		dialer.TLSClientConfig.InsecureSkipVerify = true
+	}
 
 	wsConn, _, err := dialer.DialContext(context.Background(), listenURL.String(), http.Header{internal.AuthHeaderKey: []string{authToken}})
 	if err != nil {
