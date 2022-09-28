@@ -120,7 +120,7 @@ func main() {
 
 	log.Event(logs, "successfully connected to service", log.V(1), log.Fields{"addr": wsConn.UnderlyingConn().RemoteAddr()})
 
-	signals := make(chan os.Signal)
+	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
 
 	go func() {
