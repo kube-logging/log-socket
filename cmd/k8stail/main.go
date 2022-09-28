@@ -16,6 +16,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/spf13/pflag"
+	"github.com/wasmerio/wasmer-go/wasmer"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 
@@ -27,6 +28,7 @@ func main() {
 	var authToken string
 	var clusterFlow bool
 	var listenAddr string
+	var plugins []string
 	var svcName string
 	var svcNamespace string
 	var svcPort string
@@ -35,6 +37,7 @@ func main() {
 	pflag.BoolVarP(&clusterFlow, "clusterflow", "c", false, "stream logs from a cluster flow instead of a regular flow")
 	pflag.StringVar(&listenAddr, "listen-addr", "", "address where the service accepts WebSocket listeners")
 	pflag.StringVarP(&svcNamespace, "namespace", "n", "default", "log socket service namespace")
+	pflag.StringSliceVar(&plugins, "plugin", nil, "plugins for processing incoming log records")
 	pflag.StringVarP(&svcPort, "port", "p", "10001", "log socket service listening port")
 	pflag.StringVarP(&svcName, "service", "s", "log-socket", "name of the service that accepts WebSocket listeners")
 	pflag.IntVarP(&verbosity, "verbosity", "v", verbosity, "log verbosity level")
@@ -56,6 +59,21 @@ func main() {
 		os.Exit(1)
 	}
 	flowNamespace, flowName := elts[0], elts[1]
+
+	var pipeline internal.Pipeline
+	if len(plugins) > 0 {
+		engine := wasmer.NewEngine()
+		store := wasmer.NewStore(engine)
+		for _, plugin := range plugins {
+			stage, err := internal.LoadStageFromFile(store, logs, plugin)
+			if err != nil {
+				log.Event(logs, "failed to load plugin", log.Error(err))
+				os.Exit(2)
+			}
+			pipeline = append(pipeline, stage)
+		}
+		log.Event(logs, "pipeline loaded", log.V(1), log.Fields{"pipeline": pipeline})
+	}
 
 	flowKind := "flow"
 	if clusterFlow {
@@ -143,7 +161,16 @@ func main() {
 					continue
 				}
 				log.Event(logs, "new record", log.V(2), log.Fields{"data": data})
-				fmt.Println(string(data))
+				res, err := pipeline.ProcessRecord(data)
+				if err != nil {
+					log.Event(logs, "failed to process record", log.Fields{"record": string(data), "result": res}, log.Error(err))
+				}
+				for _, rec := range res {
+					if _, err := os.Stdout.Write(rec); err != nil {
+						log.Event(logs, "failed to write record to stdout", log.Error(err))
+					}
+					fmt.Fprintln(os.Stdout)
+				}
 			}
 		}
 	}()
